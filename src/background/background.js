@@ -16,8 +16,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 
   chrome.contextMenus.create({
     id: PARENT_MENU_ID,
-    title: "Page Adapter",
-    contexts: ["page"]
+    title: 'Page Adapter',
+    contexts: ['page'],
   });
 
   for (const preset of PRESETS) {
@@ -25,22 +25,22 @@ chrome.runtime.onInstalled.addListener(async () => {
       id: `preset_${preset.id}`,
       parentId: PARENT_MENU_ID,
       title: preset.label,
-      contexts: ["page"]
+      contexts: ['page'],
     });
   }
 
   chrome.contextMenus.create({
-    id: "separator",
+    id: 'separator',
     parentId: PARENT_MENU_ID,
-    type: "separator",
-    contexts: ["page"]
+    type: 'separator',
+    contexts: ['page'],
   });
 
   chrome.contextMenus.create({
     id: OPEN_PANEL_ID,
     parentId: PARENT_MENU_ID,
     title: 'Open Page Adapter panel',
-    contexts: ['page']
+    contexts: ['page'],
   });
 });
 
@@ -53,7 +53,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   const match = info.menuItemId.match(/^preset_(.+)$/);
   if (match) {
     const presetId = match[1];
-    const preset = PRESETS.find(p => p.id === presetId);
+    const preset = PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     const message = {
       type: MESSAGE_TYPES.USER_REQUEST,
@@ -61,11 +61,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         mode: 'preset',
         request: preset.request,
         presetId: preset.id,
-        createdAt: new Date().toISOString()
-      }
+        createdAt: new Date().toISOString(),
+      },
     };
 
-    handleUserRequest(message, tab).catch(error => console.error('[Page Adapter] Context menu error:', error));
+    handleUserRequest(message, tab).catch((error) =>
+      console.error('[Page Adapter] Context menu error:', error)
+    );
   }
 });
 
@@ -74,26 +76,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return;
 
   if (message.type === MESSAGE_TYPES.USER_REQUEST) {
-    handleUserRequest(message).then(sendResponse).catch(error => {
-      console.error('[Page Adapter] Error:', error);
-      sendResponse({ ok: false, error: error.message || 'Unknown error' });
-    });
+    handleUserRequest(message)
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[Page Adapter] Error:', error);
+        sendResponse({ ok: false, error: error.message || 'Unknown error' });
+      });
     return true;
   }
 
   if (message.type === MESSAGE_TYPES.OLLAMA_REQUEST) {
-    handleOllamaRequest(message.payload).then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    handleOllamaRequest(message.payload)
+      .then(sendResponse)
+      .catch((error) =>
+        sendResponse({ ok: false, error: error.message })
+      );
     return true;
   }
 
-  // Handlers for summarize and chat
   if (message.type === MESSAGE_TYPES.SUMMARIZE_REQUEST) {
-    handleSummarize(message.payload).then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    handleSummarize(message.payload)
+      .then(sendResponse)
+      .catch((error) =>
+        sendResponse({ ok: false, error: error.message })
+      );
     return true;
   }
 
   if (message.type === MESSAGE_TYPES.CHAT_QUESTION) {
-    handleChatQuestion(message.payload).then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    handleChatQuestion(message.payload)
+      .then(sendResponse)
+      .catch((error) =>
+        sendResponse({ ok: false, error: error.message })
+      );
     return true;
   }
 
@@ -108,7 +123,10 @@ async function handleUserRequest(message, providedTab = null) {
   if (providedTab) {
     tab = providedTab;
   } else {
-    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const tabs = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
     tab = tabs[0];
   }
 
@@ -127,24 +145,17 @@ async function handleUserRequest(message, providedTab = null) {
     ...message.payload,
     page: {
       tabId: tab.id,
-      title: tab.title || "",
-      url: tab.url || ""
-    }
+      title: tab.title || '',
+      url: tab.url || '',
+    },
   };
 
   await chrome.storage.local.set({ [STORAGE_KEY]: request });
 
-  // Always show the request panel in the content script
-  await sendToContentScript(tab.id, {
-    type: MESSAGE_TYPES.SHOW_REQUEST,
-    payload: request
-  });
-
   // If the preset is 'summarize', delegate to the content script to start the flow
   if (message.payload.presetId === 'summarize') {
-    // Ask the content script to execute the summarize flow
     await sendToContentScript(tab.id, {
-      type: 'START_SUMMARIZE'
+      type: 'START_SUMMARIZE',
     });
     return { ok: true };
   }
@@ -154,8 +165,8 @@ async function handleUserRequest(message, providedTab = null) {
     type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
     payload: {
       presetId: message.payload.presetId,
-      request: message.payload.request
-    }
+      request: message.payload.request,
+    },
   });
 
   return { ok: true, request };
@@ -164,7 +175,8 @@ async function handleUserRequest(message, providedTab = null) {
 // --- Handlers for summarize and chat ---
 async function handleSummarize({ text, title }) {
   const prompt = `Summarize the following content clearly and concisely, highlighting the main points. If it is an article, extract the key ideas. The title is: "${title}".\n\n${text.slice(0, 15000)}`;
-  const systemPrompt = 'You are a helpful assistant that summarizes web content clearly and concisely.';
+  const systemPrompt =
+    'You are a helpful assistant that summarizes web content clearly and concisely.';
   try {
     const response = await callOllama(prompt, systemPrompt);
     return { ok: true, summary: response };
@@ -175,7 +187,8 @@ async function handleSummarize({ text, title }) {
 
 async function handleChatQuestion({ question, context }) {
   const prompt = `Based on the following content, answer the user's question in a helpful and accurate way. If you cannot find the answer, say so clearly.\n\nContent:\n${context.slice(0, 15000)}\n\nQuestion: ${question}`;
-  const systemPrompt = 'You are a helpful assistant that answers questions about webpage content.';
+  const systemPrompt =
+    'You are a helpful assistant that answers questions about webpage content.';
   try {
     const response = await callOllama(prompt, systemPrompt);
     return { ok: true, answer: response };
@@ -185,8 +198,12 @@ async function handleChatQuestion({ question, context }) {
 }
 
 // --- Functions for Ollama ---
-async function handleOllamaRequest({ prompt, systemPrompt = null, model = "qwen3.5:2b" }) {
-  const url = "http://localhost:11434/api/generate";
+async function handleOllamaRequest({
+  prompt,
+  systemPrompt = null,
+  model = 'qwen3.5:2b',
+}) {
+  const url = 'http://localhost:11434/api/generate';
   const body = {
     model,
     prompt,
@@ -194,14 +211,14 @@ async function handleOllamaRequest({ prompt, systemPrompt = null, model = "qwen3
     stream: false,
     options: {
       temperature: 0.7,
-      top_p: 0.9
-    }
+      top_p: 0.9,
+    },
   };
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -213,7 +230,7 @@ async function handleOllamaRequest({ prompt, systemPrompt = null, model = "qwen3
   return { ok: true, response: data.response };
 }
 
-// Función auxiliar reutilizable
+// Reusable helper function
 async function callOllama(prompt, systemPrompt = null, model = 'qwen3.5:2b') {
   const result = await handleOllamaRequest({ prompt, systemPrompt, model });
   if (!result.ok) throw new Error(result.error || 'Unknown error from Ollama');
@@ -223,7 +240,7 @@ async function callOllama(prompt, systemPrompt = null, model = 'qwen3.5:2b') {
 // --- Helper functions ---
 function isSupportedUrl(url) {
   if (!url) return false;
-  const protocols = ["http:", "https:", "file:", "ftp:"];
+  const protocols = ['http:', 'https:', 'file:', 'ftp:'];
   try {
     const parsed = new URL(url);
     return protocols.includes(parsed.protocol);
@@ -239,21 +256,25 @@ async function ensureContentScriptInjected(tabId) {
 
   while (attempts < MAX_RETRIES && !success) {
     try {
-      await chrome.tabs.sendMessage(tabId, { type: "PING" });
+      await chrome.tabs.sendMessage(tabId, { type: 'PING' });
       success = true;
       break;
     } catch (error) {
       if (attempts === 0) {
-        console.log(`[Page Adapter] Injecting content script into tab ${tabId}`);
+        console.log(
+          `[Page Adapter] Injecting content script into tab ${tabId}`
+        );
         await injectContentScripts(tabId);
       }
       attempts++;
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
   if (!success) {
-    throw new Error('Failed to establish communication with the content script. Try reloading the page and try again.');
+    throw new Error(
+      'Failed to establish communication with the content script. Try reloading the page and try again.'
+    );
   }
 }
 
@@ -261,13 +282,13 @@ async function injectContentScripts(tabId) {
   try {
     await chrome.scripting.insertCSS({
       target: { tabId },
-      files: ["src/content/content.css"]
+      files: ['src/content/content.css'],
     });
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["src/content/content.js"]
+      files: ['src/content/content.js'],
     });
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   } catch (error) {
     console.error('[Page Adapter] Error injecting scripts:', error);
     throw new Error('Failed to inject the content script into this page.');
@@ -279,6 +300,8 @@ async function sendToContentScript(tabId, message) {
     return await chrome.tabs.sendMessage(tabId, message);
   } catch (error) {
     console.error('[Page Adapter] Error sending message:', error);
-    throw new Error('Unable to interact with this page. Try a normal webpage and reload after installing the extension.');
+    throw new Error(
+      'Unable to interact with this page. Try a normal webpage and reload after installing the extension.'
+    );
   }
 }
