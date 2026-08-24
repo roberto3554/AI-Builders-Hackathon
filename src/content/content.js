@@ -210,14 +210,14 @@ function showNotification(text) {
   setTimeout(() => notif.remove(), 3000);
 }
 
-// --- AI summarize and chat ---
+// --- AI summarize and chat with floating window ---
 async function applySummarize() {
   const text = extractMainText();
   const title = document.title;
 
-  // Show loading overlay
-  const overlay = createOverlay('Generating AI summary...', 'Loading...');
-  document.body.appendChild(overlay);
+  // Show loading floating window
+  const windowElement = createFloatingWindow('Generating summary...', 'Loading...');
+  document.body.appendChild(windowElement);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -230,10 +230,10 @@ async function applySummarize() {
     }
 
     const summary = response.summary;
-    overlay.remove();
-    await showChatOverlay(summary, text);
+    // Replace loading content with the summary and chat interface
+    await showChatInFloatingWindow(windowElement, summary, text);
   } catch (error) {
-    const messagesContainer = overlay.querySelector('.page-adapter-chat-messages');
+    const messagesContainer = windowElement.querySelector('.page-adapter-chat-messages');
     if (messagesContainer) {
       messagesContainer.innerHTML = `
         <div class="page-adapter-chat-message error">
@@ -242,26 +242,88 @@ async function applySummarize() {
         </div>
       `;
     } else {
-      overlay.querySelector('.page-adapter-chat-messages').textContent = 'Error: ' + error.message;
+      // Fallback: show error in the window content area
+      const contentArea = windowElement.querySelector('.page-adapter-content');
+      if (contentArea) {
+        contentArea.innerHTML = `<p style="color: #dc2626;">Error: ${error.message}</p>`;
+      }
     }
   }
 }
 
-async function showChatOverlay(summary, context) {
-  await loadMarked(); // Ensure that marked is loaded
+async function showChatInFloatingWindow(windowElement, summary, context) {
+  await loadMarked(); // Ensure marked is loaded for markdown rendering
 
-  const overlay = createOverlay('AI Summary', '', true);
-  const messagesContainer = overlay.querySelector(".page-adapter-chat-messages");
-  const input = overlay.querySelector(".page-adapter-chat-input");
-  const sendBtn = overlay.querySelector(".page-adapter-chat-send");
+  // Update the window title and content
+  const titleBar = windowElement.querySelector('.page-adapter-window-title');
+  if (titleBar) titleBar.textContent = 'AI Summary';
 
-  addMessage(messagesContainer, 'AI', summary, 'assistant');
+  const contentArea = windowElement.querySelector('.page-adapter-content');
+  // Clear previous content and build chat interface
+  contentArea.innerHTML = '';
 
+  // Messages container
+  const messagesContainer = document.createElement('div');
+  messagesContainer.className = 'page-adapter-chat-messages';
+  messagesContainer.style.cssText = `
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  `;
+  contentArea.appendChild(messagesContainer);
+
+  // Add the summary as the first assistant message
+  addMessage(messagesContainer, 'Assistant', summary, 'assistant');
+
+  // Input area
+  const inputArea = document.createElement('div');
+  inputArea.style.cssText = 'display: flex; gap: 8px;';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'page-adapter-chat-input';
+  input.placeholder = 'Ask a question about the content...';
+  input.style.cssText = `
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    outline: none;
+    font-size: 14px;
+  `;
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'page-adapter-chat-send';
+  sendBtn.textContent = 'Ask';
+  sendBtn.style.cssText = `
+    padding: 8px 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  `;
+  inputArea.append(input, sendBtn);
+  contentArea.appendChild(inputArea);
+
+  // Store references for later use
+  windowElement._messagesContainer = messagesContainer;
+  windowElement._input = input;
+  windowElement._sendBtn = sendBtn;
+  windowElement._context = context;
+
+  // Event handlers
   async function sendQuestion() {
     const question = input.value.trim();
     if (!question) return;
     addMessage(messagesContainer, 'You', question, 'user');
-    input.value = "";
+    input.value = '';
     input.disabled = true;
     sendBtn.disabled = true;
 
@@ -273,9 +335,9 @@ async function showChatOverlay(summary, context) {
       if (!response?.ok) {
         throw new Error(response?.error || 'Error in response.');
       }
-      addMessage(messagesContainer, 'AI', response.answer, 'assistant');
+      addMessage(messagesContainer, 'Assistant', response.answer, 'assistant');
     } catch (error) {
-      addMessage(messagesContainer, 'AI', `Error: ${error.message}`, 'assistant');
+      addMessage(messagesContainer, 'Assistant', `Error: ${error.message}`, 'assistant');
     } finally {
       input.disabled = false;
       sendBtn.disabled = false;
@@ -283,25 +345,23 @@ async function showChatOverlay(summary, context) {
     }
   }
 
-  sendBtn.addEventListener("click", sendQuestion);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+  sendBtn.addEventListener('click', sendQuestion);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendQuestion();
     }
   });
-
-  document.body.appendChild(overlay);
 }
 
 function addMessage(container, sender, text, role) {
   const msg = document.createElement('div');
-  msg.className = `page-adapter-chat-message ${role}`; // 'user' o 'assistant'
+  msg.className = `page-adapter-chat-message ${role}`;
 
   const bubble = document.createElement('div');
   bubble.className = 'page-adapter-chat-bubble';
 
-  // Render content (markdown)
+  // Render markdown if marked is available
   const htmlContent = renderMarkdown(text);
   bubble.innerHTML = htmlContent;
 
@@ -310,87 +370,127 @@ function addMessage(container, sender, text, role) {
   container.scrollTop = container.scrollHeight;
 }
 
-function createOverlay(title, initialContent = "", withChat = false) {
-  const overlay = document.createElement("div");
-  overlay.className = "page-adapter-transformation";
-  overlay.style.cssText = `
+/**
+ * Creates a floating window with a draggable title bar.
+ * The window does not close when clicking outside.
+ *
+ * @param {string} title - The title to display in the header.
+ * @param {string} initialContent - HTML content to show initially (optional).
+ * @returns {HTMLElement} The container element of the floating window.
+ */
+function createFloatingWindow(title, initialContent = '') {
+  const container = document.createElement('div');
+  container.className = 'page-adapter-floating-window';
+  container.style.cssText = `
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 999999;
-    font-family: system-ui, sans-serif;
-  `;
-
-  const box = document.createElement("div");
-  box.style.cssText = `
+    top: 20px;
+    right: 20px;
+    width: min(480px, calc(100vw - 40px));
+    max-height: calc(100vh - 40px);
     background: white;
     border-radius: 12px;
-    padding: 24px;
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-    position: relative;
-    margin: 20px;
+    z-index: 2147483647;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
   `;
 
-  const header = document.createElement("div");
-  header.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;";
-  header.innerHTML = `
-    <h3 style="margin: 0;">${title}</h3>
-    <button class="page-adapter-close" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
+  // Title bar (draggable)
+  const titleBar = document.createElement('div');
+  titleBar.className = 'page-adapter-window-titlebar';
+  titleBar.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f3f4f6;
+    cursor: grab;
+    user-select: none;
+    border-bottom: 1px solid #e5e7eb;
   `;
-  box.appendChild(header);
+  titleBar.innerHTML = `
+    <span class="page-adapter-window-title" style="font-weight: 600;">${title}</span>
+    <button class="page-adapter-window-close" style="
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0 4px;
+      line-height: 1;
+    ">×</button>
+  `;
+  container.appendChild(titleBar);
 
-  const contentArea = document.createElement("div");
-  contentArea.style.cssText = "flex: 1; overflow-y: auto; margin-bottom: 12px;";
-
-  if (withChat) {
-    const messages = document.createElement("div");
-    messages.className = "page-adapter-chat-messages";
-    messages.style.cssText = "max-height: 300px; overflow-y: auto; margin-bottom: 12px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb;";
-    contentArea.appendChild(messages);
-
-    const inputArea = document.createElement("div");
-    inputArea.style.cssText = "display: flex; gap: 8px;";
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "page-adapter-chat-input";
-    input.placeholder = 'Ask a question about the content...';
-    input.style.cssText = "flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; outline: none; font-size: 14px;";
-    const sendBtn = document.createElement("button");
-    sendBtn.className = "page-adapter-chat-send";
-    sendBtn.textContent = 'Ask';
-    sendBtn.style.cssText = "padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;";
-    inputArea.append(input, sendBtn);
-    contentArea.appendChild(inputArea);
-
-    box._messages = messages;
-    box._input = input;
-    box._sendBtn = sendBtn;
-  } else {
-    const content = document.createElement("div");
-    content.className = "page-adapter-chat-messages";
-    content.innerHTML = initialContent;
-    contentArea.appendChild(content);
+  // Content area
+  const contentArea = document.createElement('div');
+  contentArea.className = 'page-adapter-content';
+  contentArea.style.cssText = `
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  `;
+  if (initialContent) {
+    contentArea.innerHTML = initialContent;
   }
+  container.appendChild(contentArea);
 
-  box.appendChild(contentArea);
-  overlay.appendChild(box);
-
-  const closeBtn = box.querySelector(".page-adapter-close");
-  closeBtn.addEventListener("click", () => overlay.remove());
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
+  // Close button handler
+  const closeBtn = titleBar.querySelector('.page-adapter-window-close');
+  closeBtn.addEventListener('click', () => {
+    container.remove();
   });
 
-  return overlay;
+  // Drag logic
+  let isDragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  function onMouseDown(e) {
+    // Only drag when clicking on the title bar, not on buttons or inputs
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    isDragging = true;
+    const rect = container.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    container.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    e.preventDefault();
+  }
+
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    let left = e.clientX - offsetX;
+    let top = e.clientY - offsetY;
+    // Keep within viewport
+    const maxX = window.innerWidth - container.offsetWidth;
+    const maxY = window.innerHeight - container.offsetHeight;
+    left = Math.max(0, Math.min(left, maxX));
+    top = Math.max(0, Math.min(top, maxY));
+    container.style.left = left + 'px';
+    container.style.top = top + 'px';
+    container.style.right = 'auto'; // override right positioning
+  }
+
+  function onMouseUp() {
+    isDragging = false;
+    container.style.cursor = '';
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  titleBar.addEventListener('mousedown', onMouseDown);
+
+  // Prevent the window from closing when clicking outside
+  // (no backdrop, so it's naturally persistent)
+
+  return container;
 }
 
 // --- Existing functions (request panel, context, etc.) ---
