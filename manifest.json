@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Page Adapter",
+  "version": "0.1.0",
+  "description": "Adapt web pages to your needs.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://localhost:11434/*",
+    "http://127.0.0.1:11434/*"
+  ],
+  "action": {
+    "default_title": "Page Adapter",
+    "default_popup": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": ["src/lib/marked.umd.js"],
+    "matches": ["<all_urls>"]
+  }]
+}
