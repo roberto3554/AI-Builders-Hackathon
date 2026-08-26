@@ -448,7 +448,6 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 14px;
     overflow: hidden;
-    user-select: none;
   `;
 
   // Barra de título (arrastrable)
