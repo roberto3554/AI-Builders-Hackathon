@@ -1,19 +1,21 @@
 /**
  * @fileoverview Popup UI logic for the Page Adapter extension.
  * Renders preset buttons, handles text input, and sends user requests.
- * Dependencies: shared/messages.js, Chrome runtime API.
+ * Dependencies: shared/constants.js, shared/messages.js, shared/locale.js.
  * Used by: popup.html.
  */
 
-import { PRESETS, createUserRequest } from '../shared/messages.js';
+import { PRESETS } from '../shared/constants.js';
+import { createUserRequest } from '../shared/messages.js';
+import { t, setLocale } from '../shared/locale.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 const MAX_REQUEST_LENGTH = 2000;
-const STATUS_DISPLAY_MS = 350; // Time to show success before closing popup.
-const DEFAULT_STATUS_MESSAGE = 'Type a need or select a quick action.';
+const STATUS_DISPLAY_MS = 350;
+const DEFAULT_STATUS_MESSAGE = t('popup.status.default');
 
 // =============================================================================
 // DOM references
@@ -28,6 +30,18 @@ const counterElement = document.querySelector('#counter');
 // =============================================================================
 // Initialization
 // =============================================================================
+
+// Set locale (default is 'en'; could be changed based on browser language).
+setLocale('en');
+
+// Populate static text from locale.
+document.querySelector('#popup-title').textContent = t('popup.title');
+document.querySelector('#popup-subtitle').textContent = t('popup.subtitle');
+document.querySelector('#quick-actions-label').textContent = t('popup.quick_actions');
+document.querySelector('#request-label').textContent = t('popup.write_need');
+requestInput.placeholder = t('popup.placeholder');
+adaptButton.textContent = t('popup.adapt_button');
+statusElement.textContent = DEFAULT_STATUS_MESSAGE;
 
 renderPresets();
 updateCounter();
@@ -81,7 +95,7 @@ async function submitNaturalLanguage() {
   const request = requestInput.value.trim();
 
   if (!request) {
-    setStatus(DEFAULT_STATUS_MESSAGE, 'error');
+    setStatus(t('popup.status.default'), 'error');
     requestInput.focus();
     return;
   }
@@ -106,21 +120,21 @@ async function submitNaturalLanguage() {
  */
 async function sendRequest(message) {
   setLoading(true);
-  setStatus('Sending request...');
+  setStatus(t('popup.status.sending'));
 
   try {
     const response = await chrome.runtime.sendMessage(message);
 
     if (!response?.ok) {
-      throw new Error(response?.error || 'Failed to send request.');
+      throw new Error(response?.error || t('popup.error.generic'));
     }
 
-    setStatus('Request sent to the page.', 'success');
+    setStatus(t('popup.status.success'), 'success');
 
     // Close popup after a short delay to show status.
     setTimeout(() => window.close(), STATUS_DISPLAY_MS);
   } catch (error) {
-    setStatus(error.message || 'An error occurred.', 'error');
+    setStatus(error.message || t('popup.error.generic'), 'error');
     setLoading(false);
   }
 }
@@ -130,7 +144,7 @@ async function sendRequest(message) {
 // =============================================================================
 
 /**
- * Enables or disables all interactive elements (preset buttons and adapt button).
+ * Enables or disables all interactive elements.
  *
  * @param {boolean} value - `true` to disable, `false` to enable.
  */
@@ -158,7 +172,7 @@ function setStatus(message, type = '') {
  */
 function updateCounter() {
   const length = requestInput.value.length;
-  counterElement.textContent = `${length} / ${MAX_REQUEST_LENGTH}`;
+  counterElement.textContent = t('popup.counter', { current: length, max: MAX_REQUEST_LENGTH });
 }
 
 // =============================================================================

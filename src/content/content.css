@@ -1,9 +1,87 @@
 /**
  * @fileoverview Styles for the Page Adapter content script UI.
  * All styles are scoped to the injected panel and its children.
+ * Theming via CSS variables, supports light/dark and high contrast.
  */
 
-/* Main panel */
+/* ============================================================================
+   CSS Variables (Light theme default)
+   ============================================================================ */
+:root {
+  --pa-bg-surface: #ffffff;
+  --pa-bg-subtle: #f9fafb;
+  --pa-bg-elevated: #ffffff;
+  --pa-bg-input: #ffffff;
+  --pa-text-primary: #1f2937;
+  --pa-text-secondary: #6b7280;
+  --pa-text-muted: #9ca3af;
+  --pa-text-light: #ffffff;
+  --pa-border-color: #e5e7eb;
+  --pa-border-input: #d1d5db;
+  --pa-border-focus: #60a5fa;
+  --pa-primary: #2563eb;
+  --pa-primary-hover: #1d4ed8;
+  --pa-primary-disabled-opacity: 0.55;
+  --pa-radius-sm: 8px;
+  --pa-radius-md: 10px;
+  --pa-radius-lg: 16px;
+  --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
+  --pa-shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
+  --pa-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --pa-font-size-base: 14px;
+  --pa-spacing-xs: 4px;
+  --pa-spacing-sm: 8px;
+  --pa-spacing-md: 12px;
+  --pa-spacing-lg: 16px;
+  --pa-spacing-xl: 20px;
+  --pa-spacing-2xl: 24px;
+}
+
+/* ============================================================================
+   Dark theme (system preference)
+   ============================================================================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pa-bg-surface: #1e293b;
+    --pa-bg-subtle: #0f172a;
+    --pa-bg-elevated: #334155;
+    --pa-bg-input: #334155;
+    --pa-text-primary: #f1f5f9;
+    --pa-text-secondary: #94a3b8;
+    --pa-text-muted: #64748b;
+    --pa-text-light: #ffffff;
+    --pa-border-color: #475569;
+    --pa-border-input: #475569;
+    --pa-border-focus: #60a5fa;
+    --pa-primary: #3b82f6;
+    --pa-primary-hover: #2563eb;
+    --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ============================================================================
+   High contrast mode (applied via class on body)
+   ============================================================================ */
+body.page-adapter-high-contrast {
+  --pa-bg-surface: #000000;
+  --pa-bg-subtle: #000000;
+  --pa-bg-elevated: #000000;
+  --pa-bg-input: #000000;
+  --pa-text-primary: #ffffff;
+  --pa-text-secondary: #ffffff;
+  --pa-text-muted: #ffffff;
+  --pa-text-light: #ffffff;
+  --pa-border-color: #ffffff;
+  --pa-border-input: #ffffff;
+  --pa-border-focus: #ffff00;
+  --pa-primary: #ffff00;
+  --pa-primary-hover: #ffff00;
+  --pa-shadow-panel: none;
+}
+
+/* ============================================================================
+   Main panel
+   ============================================================================ */
 #page-adapter-panel {
   all: initial;
   position: fixed;
@@ -12,14 +90,14 @@
   z-index: 2147483647;
   width: min(380px, calc(100vw - 40px));
   box-sizing: border-box;
-  padding: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 16px;
-  background: #ffffff;
-  color: #1f2937;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.2);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
+  padding: var(--pa-spacing-lg);
+  border: 1px solid var(--pa-border-color);
+  border-radius: var(--pa-radius-lg);
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  box-shadow: var(--pa-shadow-panel);
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
   line-height: 1.5;
 }
 
@@ -30,13 +108,15 @@
   font-family: inherit;
 }
 
-/* Header */
+/* ============================================================================
+   Header
+   ============================================================================ */
 .page-adapter-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: var(--pa-spacing-md);
+  margin-bottom: var(--pa-spacing-lg);
   font-size: 16px;
 }
 
@@ -45,27 +125,35 @@
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
-  background: #f3f4f6;
-  color: #374151;
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-secondary);
   cursor: pointer;
   font-size: 20px;
   line-height: 1;
 }
 
 .page-adapter-close:hover {
-  background: #e5e7eb;
+  background: var(--pa-border-color);
 }
 
+.page-adapter-close:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Status, labels, request display
+   ============================================================================ */
 .page-adapter-status {
-  margin-bottom: 14px;
-  color: #2563eb;
+  margin-bottom: var(--pa-spacing-lg);
+  color: var(--pa-primary);
   font-weight: 600;
 }
 
 .page-adapter-label {
-  margin-bottom: 6px;
-  color: #6b7280;
+  margin-bottom: var(--pa-spacing-sm);
+  color: var(--pa-text-secondary);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -73,18 +161,18 @@
 }
 
 .page-adapter-request {
-  padding: 12px;
-  border-radius: 10px;
-  background: #f9fafb;
-  color: #111827;
+  padding: var(--pa-spacing-md);
+  border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
 }
 
 .page-adapter-info {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-top: 14px;
-  color: #6b7280;
+  gap: var(--pa-spacing-sm);
+  margin-top: var(--pa-spacing-lg);
+  color: var(--pa-text-secondary);
   font-size: 12px;
 }
 
@@ -99,30 +187,33 @@
 
 .page-adapter-page {
   overflow: hidden;
-  margin-top: 14px;
-  color: #9ca3af;
+  margin-top: var(--pa-spacing-lg);
+  color: var(--pa-text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Chat messages container */
+/* ============================================================================
+   Chat messages container
+   ============================================================================ */
 .page-adapter-chat-messages {
   max-height: 300px;
   overflow-y: auto;
-  padding: 8px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  padding: var(--pa-spacing-sm);
+  background: var(--pa-bg-subtle);
+  border-radius: var(--pa-radius-sm);
+  border: 1px solid var(--pa-border-color);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--pa-spacing-sm);
+  margin-bottom: var(--pa-spacing-md);
 }
 
 /* Individual chat message */
 .page-adapter-chat-message {
   display: flex;
-  margin-bottom: 4px;
+  margin-bottom: var(--pa-spacing-xs);
 }
 
 .page-adapter-chat-message.user {
@@ -135,49 +226,214 @@
 
 .page-adapter-chat-bubble {
   max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  border-radius: var(--pa-radius-md);
   word-wrap: break-word;
-  background: #e5e7eb;
-  color: #111827;
+  background: var(--pa-border-color);
+  color: var(--pa-text-primary);
 }
 
 .page-adapter-chat-message.user .page-adapter-chat-bubble {
-  background: #2563eb;
-  color: white;
+  background: var(--pa-primary);
+  color: var(--pa-text-light);
 }
 
 .page-adapter-chat-message.assistant .page-adapter-chat-bubble {
-  background: #f1f5f9;
-  color: #111827;
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
 }
 
 /* Markdown content inside chat bubbles */
 .page-adapter-chat-bubble p {
-  margin: 0 0 6px 0;
+  margin: 0 0 var(--pa-spacing-sm) 0;
 }
-
 .page-adapter-chat-bubble p:last-child {
   margin-bottom: 0;
 }
-
 .page-adapter-chat-bubble ul,
 .page-adapter-chat-bubble ol {
-  margin: 4px 0;
-  padding-left: 20px;
+  margin: var(--pa-spacing-xs) 0;
+  padding-left: var(--pa-spacing-xl);
 }
-
 .page-adapter-chat-bubble code {
   background: rgba(0, 0, 0, 0.08);
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: var(--pa-radius-sm);
   font-family: monospace;
 }
-
 .page-adapter-chat-bubble pre {
   background: #1e293b;
   color: #e2e8f0;
-  padding: 8px;
-  border-radius: 6px;
+  padding: var(--pa-spacing-sm);
+  border-radius: var(--pa-radius-sm);
   overflow-x: auto;
+}
+
+/* ============================================================================
+   Chat input area
+   ============================================================================ */
+.page-adapter-chat-input-area {
+  display: flex;
+  gap: var(--pa-spacing-sm);
+  padding-top: var(--pa-spacing-sm);
+  border-top: 1px solid var(--pa-border-color);
+  margin-top: var(--pa-spacing-sm);
+}
+
+.page-adapter-chat-input {
+  flex: 1;
+  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  border: 1px solid var(--pa-border-input);
+  border-radius: var(--pa-radius-sm);
+  outline: none;
+  font-size: var(--pa-font-size-base);
+  background: var(--pa-bg-input);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-chat-input:focus {
+  border-color: var(--pa-border-focus);
+  box-shadow: var(--pa-shadow-focus);
+}
+
+.page-adapter-chat-input:disabled {
+  opacity: var(--pa-primary-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.page-adapter-chat-send {
+  padding: var(--pa-spacing-sm) var(--pa-spacing-lg);
+  background: var(--pa-primary);
+  color: var(--pa-text-light);
+  border: none;
+  border-radius: var(--pa-radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--pa-font-size-base);
+}
+
+.page-adapter-chat-send:hover {
+  background: var(--pa-primary-hover);
+}
+
+.page-adapter-chat-send:disabled {
+  opacity: var(--pa-primary-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.page-adapter-chat-send:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Floating window (draggable panel)
+   ============================================================================ */
+.page-adapter-floating-window {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  background: var(--pa-bg-surface);
+  border-radius: var(--pa-radius-lg);
+  box-shadow: var(--pa-shadow-panel);
+  overflow: hidden;
+  min-width: 300px;
+  min-height: 200px;
+}
+
+.page-adapter-floating-window .page-adapter-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
+  background: var(--pa-bg-subtle);
+  cursor: move;
+  border-bottom: 1px solid var(--pa-border-color);
+  flex-shrink: 0;
+}
+
+.page-adapter-floating-window .page-adapter-title-text {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-floating-window .page-adapter-content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--pa-spacing-lg);
+  background: var(--pa-bg-surface);
+}
+
+/* ============================================================================
+   Overlay modal
+   ============================================================================ */
+.page-adapter-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  font-family: var(--pa-font-family);
+}
+
+.page-adapter-overlay-content {
+  background: var(--pa-bg-surface);
+  border-radius: var(--pa-radius-lg);
+  padding: var(--pa-spacing-2xl);
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--pa-shadow-panel);
+  position: relative;
+  margin: var(--pa-spacing-xl);
+}
+
+.page-adapter-overlay-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--pa-text-secondary);
+}
+
+.page-adapter-overlay-close:hover {
+  color: var(--pa-text-primary);
+}
+
+/* ============================================================================
+   Toast notification
+   ============================================================================ */
+.page-adapter-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--pa-bg-elevated);
+  color: var(--pa-text-primary);
+  padding: var(--pa-spacing-md) var(--pa-spacing-xl);
+  border-radius: var(--pa-radius-sm);
+  z-index: 999999;
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  box-shadow: var(--pa-shadow-panel);
+  border: 1px solid var(--pa-border-color);
+  pointer-events: none;
+  animation: pa-fade-in 0.15s ease;
+}
+
+@keyframes pa-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }

@@ -1,8 +1,83 @@
 /**
  * @fileoverview Styles for the Page Adapter popup UI.
- * Contains layout, typography, and component styles for the extension popup.
+ * All colours are defined as CSS variables for theming.
+ * Dependencies: none.
+ * Used by: popup.html.
  */
 
+/* ============================================================================
+   CSS Variables (Light theme default)
+   ============================================================================ */
+:root {
+  --bg-surface: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-input: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-color: #e5e7eb;
+  --border-input: #d1d5db;
+  --border-focus: #60a5fa;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-disabled-opacity: 0.55;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-popup: 0 18px 50px rgba(0, 0, 0, 0.2);
+  --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
+  --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-base: 14px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+}
+
+/* ============================================================================
+   Dark theme (system preference)
+   ============================================================================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-surface: #1e293b;
+    --bg-subtle: #0f172a;
+    --bg-input: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-color: #475569;
+    --border-input: #475569;
+    --border-focus: #60a5fa;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --shadow-popup: 0 18px 50px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ============================================================================
+   High contrast mode (applied via class on body)
+   ============================================================================ */
+body.high-contrast {
+  --bg-surface: #000000;
+  --bg-subtle: #000000;
+  --bg-input: #000000;
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #ffffff;
+  --border-color: #ffffff;
+  --border-input: #ffffff;
+  --border-focus: #ffff00;
+  --primary: #ffff00;
+  --primary-hover: #ffff00;
+  --shadow-popup: none;
+}
+
+/* ============================================================================
+   Reset & base
+   ============================================================================ */
 * {
   box-sizing: border-box;
 }
@@ -16,9 +91,11 @@ body {
 }
 
 body {
-  background: #f8fafc;
-  color: #111827;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
 }
 
 button,
@@ -26,24 +103,28 @@ textarea {
   font: inherit;
 }
 
+/* ============================================================================
+   App layout
+   ============================================================================ */
 .app {
-  padding: 20px;
+  padding: var(--spacing-xl);
 }
 
 .header {
-  margin-bottom: 22px;
+  margin-bottom: 22px; /* slightly larger than spacing-2xl */
 }
 
 h1 {
   font-size: 20px;
   line-height: 1.2;
   margin: 0;
+  color: var(--text-primary);
 }
 
 .header p {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 13px;
-  margin: 6px 0 0;
+  margin: var(--spacing-sm) 0 0;
 }
 
 .section + .section {
@@ -51,46 +132,56 @@ h1 {
 }
 
 h2 {
-  color: #4b5563;
+  color: var(--text-secondary);
   font-size: 13px;
-  margin: 0 0 10px;
+  margin: 0 0 var(--spacing-md);
 }
 
+/* ============================================================================
+   Presets grid
+   ============================================================================ */
 .presets {
   display: grid;
-  gap: 8px;
+  gap: var(--spacing-sm);
   grid-template-columns: 1fr 1fr;
 }
 
 .preset {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  color: #1f2937;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
   cursor: pointer;
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-sm);
   min-height: 42px;
   padding: 9px 10px;
   text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .preset:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--bg-subtle);
+  border-color: var(--border-input);
+}
+
+.preset:disabled {
+  opacity: var(--primary-disabled-opacity);
+  cursor: not-allowed;
 }
 
 .preset-icon {
-  background: #eff6ff;
-  border-radius: 7px;
-  color: #2563eb;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--primary);
   display: grid;
   font-size: 12px;
   font-weight: 700;
   height: 24px;
   place-items: center;
   width: 24px;
+  flex-shrink: 0;
 }
 
 .preset-icon img {
@@ -100,49 +191,61 @@ h2 {
   width: 100%;
 }
 
+/* ============================================================================
+   Input area
+   ============================================================================ */
 .input-label {
-  color: #4b5563;
+  color: var(--text-secondary);
   display: block;
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-sm);
 }
 
 textarea {
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  color: #111827;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
   display: block;
   font-size: 13px;
   line-height: 1.5;
   min-height: 120px;
   outline: none;
-  padding: 12px;
+  padding: var(--spacing-md);
   resize: vertical;
   width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 textarea:focus {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+textarea:disabled {
+  opacity: var(--primary-disabled-opacity);
+  cursor: not-allowed;
 }
 
 .input-footer {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: var(--spacing-md);
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: var(--spacing-sm);
 }
 
 #counter {
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
+/* ============================================================================
+   Buttons
+   ============================================================================ */
 .primary-button {
-  background: #2563eb;
+  background: var(--primary);
   border: 0;
   border-radius: 9px;
   color: #ffffff;
@@ -150,28 +253,47 @@ textarea:focus {
   font-size: 13px;
   font-weight: 600;
   padding: 9px 16px;
+  transition: background 0.15s ease;
 }
 
 .primary-button:hover {
-  background: #1d4ed8;
+  background: var(--primary-hover);
 }
 
 .primary-button:disabled {
+  opacity: var(--primary-disabled-opacity);
   cursor: not-allowed;
-  opacity: 0.55;
 }
 
+.primary-button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Status
+   ============================================================================ */
 .status {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 12px;
-  margin-top: 14px;
+  margin-top: var(--spacing-lg);
   min-height: 20px;
 }
 
 .status.error {
-  color: #dc2626;
+  color: #dc2626; /* keep semantic error red accessible */
 }
 
 .status.success {
-  color: #16a34a;
+  color: #16a34a; /* keep semantic success green accessible */
+}
+
+/* In dark mode, adjust semantic colours for better contrast */
+@media (prefers-color-scheme: dark) {
+  .status.error {
+    color: #f87171;
+  }
+  .status.success {
+    color: #4ade80;
+  }
 }

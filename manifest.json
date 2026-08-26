@@ -29,8 +29,22 @@
       "run_at": "document_idle"
     }
   ],
-  "web_accessible_resources": [{
-    "resources": ["src/lib/marked.umd.js", "src/lib/marked.esm.js"],
-    "matches": ["<all_urls>"]
-  }]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/lib/marked.umd.js",
+        "src/lib/marked.esm.js",
+        "src/content/page-context.js",
+        "src/content/transformations.js",
+        "src/content/summarizer.js",
+        "src/content/floating-ui.js",
+        "src/content/marked-loader.js",
+        "src/shared/locale.js",
+        "src/locales/index.js",
+        "src/locales/en.js",
+        "src/locales/es.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
