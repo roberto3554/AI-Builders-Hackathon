@@ -1,13 +1,33 @@
 /**
  * @fileoverview Popup UI logic for the Page Adapter extension.
+ * Renders preset buttons, handles text input, and sends user requests.
+ * Dependencies: shared/messages.js, Chrome runtime API.
+ * Used by: popup.html.
  */
+
 import { PRESETS, createUserRequest } from '../shared/messages.js';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const MAX_REQUEST_LENGTH = 2000;
+const STATUS_DISPLAY_MS = 350; // Time to show success before closing popup.
+const DEFAULT_STATUS_MESSAGE = 'Type a need or select a quick action.';
+
+// =============================================================================
+// DOM references
+// =============================================================================
 
 const presetsContainer = document.querySelector('#presets');
 const requestInput = document.querySelector('#request');
 const adaptButton = document.querySelector('#adapt');
-const status = document.querySelector('#status');
-const counter = document.querySelector('#counter');
+const statusElement = document.querySelector('#status');
+const counterElement = document.querySelector('#counter');
+
+// =============================================================================
+// Initialization
+// =============================================================================
 
 renderPresets();
 updateCounter();
@@ -15,29 +35,22 @@ updateCounter();
 requestInput.addEventListener('input', updateCounter);
 adaptButton.addEventListener('click', submitNaturalLanguage);
 
-async function submitNaturalLanguage() {
-  const request = requestInput.value.trim();
+// =============================================================================
+// Rendering functions
+// =============================================================================
 
-  if (!request) {
-    setStatus('Type a need or select a quick action.', 'error');
-    requestInput.focus();
-    return;
-  }
-
-  await sendRequest(
-    createUserRequest({
-      mode: 'natural_language',
-      request
-    })
-  );
-}
-
+/**
+ * Renders the preset buttons in the popup.
+ * Each button triggers a user request when clicked.
+ */
 function renderPresets() {
   for (const preset of PRESETS) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'preset';
+
     const iconUrl = chrome.runtime.getURL(preset.icon || '');
+
     button.innerHTML = `
       <span class="preset-icon"><img src="${iconUrl}" alt="" /></span>
       <span>${escapeHtml(preset.label)}</span>
@@ -48,7 +61,7 @@ function renderPresets() {
         createUserRequest({
           mode: 'preset',
           request: preset.request,
-          presetId: preset.id
+          presetId: preset.id,
         })
       );
     });
@@ -57,6 +70,40 @@ function renderPresets() {
   }
 }
 
+// =============================================================================
+// Event handlers
+// =============================================================================
+
+/**
+ * Handles the natural language submission from the text area.
+ */
+async function submitNaturalLanguage() {
+  const request = requestInput.value.trim();
+
+  if (!request) {
+    setStatus(DEFAULT_STATUS_MESSAGE, 'error');
+    requestInput.focus();
+    return;
+  }
+
+  await sendRequest(
+    createUserRequest({
+      mode: 'natural_language',
+      request,
+    })
+  );
+}
+
+// =============================================================================
+// Request sending
+// =============================================================================
+
+/**
+ * Sends a user request to the background script and handles the response.
+ *
+ * @param {object} message - The request message to send.
+ * @returns {Promise<void>}
+ */
 async function sendRequest(message) {
   setLoading(true);
   setStatus('Sending request...');
@@ -70,30 +117,60 @@ async function sendRequest(message) {
 
     setStatus('Request sent to the page.', 'success');
 
-    // Small delay so user can see the status briefly
-    setTimeout(() => window.close(), 350);
+    // Close popup after a short delay to show status.
+    setTimeout(() => window.close(), STATUS_DISPLAY_MS);
   } catch (error) {
     setStatus(error.message || 'An error occurred.', 'error');
     setLoading(false);
   }
 }
 
+// =============================================================================
+// UI state helpers
+// =============================================================================
+
+/**
+ * Enables or disables all interactive elements (preset buttons and adapt button).
+ *
+ * @param {boolean} value - `true` to disable, `false` to enable.
+ */
 function setLoading(value) {
   adaptButton.disabled = value;
+
   document.querySelectorAll('.preset').forEach((button) => {
     button.disabled = value;
   });
 }
 
+/**
+ * Updates the status message and its CSS class.
+ *
+ * @param {string} message - The status text to display.
+ * @param {string} [type=''] - Optional type ('error', 'success', or empty).
+ */
 function setStatus(message, type = '') {
-  status.textContent = message;
-  status.className = `status ${type}`.trim();
+  statusElement.textContent = message;
+  statusElement.className = `status ${type}`.trim();
 }
 
+/**
+ * Updates the character counter for the text area.
+ */
 function updateCounter() {
-  counter.textContent = `${requestInput.value.length} / 2000`;
+  const length = requestInput.value.length;
+  counterElement.textContent = `${length} / ${MAX_REQUEST_LENGTH}`;
 }
 
+// =============================================================================
+// Utilities
+// =============================================================================
+
+/**
+ * Escapes HTML special characters in a string to prevent XSS.
+ *
+ * @param {string} value - The raw string.
+ * @returns {string} The escaped string.
+ */
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')

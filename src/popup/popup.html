@@ -1,3 +1,9 @@
+<!--
+  @fileoverview Popup UI for the Page Adapter extension.
+  Renders preset buttons and handles user input for natural language requests.
+  Dependencies: popup.css, popup.js.
+-->
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -17,27 +23,15 @@
 
     <section class="section">
       <h2>Quick actions</h2>
-
       <div id="presets" class="presets"></div>
     </section>
 
     <section class="section">
-      <label class="input-label" for="request">
-        Or write what you need
-      </label>
-
-      <textarea
-        id="request"
-        rows="5"
-        placeholder="E.g.: Make this page simpler and hide non-essential elements."
-        maxlength="2000"
-      ></textarea>
-
+      <label class="input-label" for="request">Or write what you need</label>
+      <textarea id="request" rows="5" placeholder="E.g.: Make this page simpler and hide non-essential elements." maxlength="2000"></textarea>
       <div class="input-footer">
         <span id="counter">0 / 2000</span>
-        <button id="adapt" class="primary-button" type="button">
-          Adapt
-        </button>
+        <button id="adapt" class="primary-button" type="button">Adapt</button>
       </div>
     </section>
 

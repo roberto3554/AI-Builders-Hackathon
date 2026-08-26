@@ -2,59 +2,93 @@
  * @fileoverview Shared message types and preset definitions used across
  * the extension. All message type constants are kept here to avoid
  * duplicated string literals.
+ * Dependencies: None.
+ * Used by: background, content, and popup scripts.
+ */
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/**
+ * Immutable map of message type constants.
+ * Sorted alphabetically by key for consistency.
  */
 export const MESSAGE_TYPES = Object.freeze({
-  USER_REQUEST: 'USER_REQUEST',
-  SHOW_REQUEST: 'SHOW_REQUEST',
-  GET_PAGE_CONTEXT: 'GET_PAGE_CONTEXT',
-  PAGE_CONTEXT: 'PAGE_CONTEXT',
-  PING: 'PING',
   APPLY_TRANSFORMATION: 'APPLY_TRANSFORMATION',
+  CHAT_QUESTION: 'CHAT_QUESTION',
+  CHAT_RESPONSE: 'CHAT_RESPONSE',
+  GET_PAGE_CONTEXT: 'GET_PAGE_CONTEXT',
   OLLAMA_REQUEST: 'OLLAMA_REQUEST',
   OLLAMA_RESPONSE: 'OLLAMA_RESPONSE',
-  SUMMARIZE_PAGE: 'SUMMARIZE_PAGE',
+  PAGE_CONTEXT: 'PAGE_CONTEXT',
+  PING: 'PING',
+  SHOW_REQUEST: 'SHOW_REQUEST',
   SHOW_SUMMARY: 'SHOW_SUMMARY',
+  SUMMARIZE_PAGE: 'SUMMARIZE_PAGE',
   SUMMARIZE_REQUEST: 'SUMMARIZE_REQUEST',
   SUMMARIZE_RESPONSE: 'SUMMARIZE_RESPONSE',
-  CHAT_QUESTION: 'CHAT_QUESTION',
-  CHAT_RESPONSE: 'CHAT_RESPONSE'
+  USER_REQUEST: 'USER_REQUEST',
 });
 
+/**
+ * Immutable array of preset definitions.
+ * Sorted alphabetically by id.
+ */
 export const PRESETS = Object.freeze([
   {
-    id: 'summarize',
-    label: 'Summarize',
-    icon: 'src/assets/icons/summarize.svg',
-    request: 'Summarize the main content of this page clearly and concisely.'
+    id: 'explain',
+    icon: 'src/assets/icons/explain.svg',
+    label: 'Explain',
+    request: 'Explain the main content of this page in simple terms.',
   },
   {
     id: 'simplify',
-    label: 'Simplify',
     icon: 'src/assets/icons/simplify.svg',
-    request: 'Make this page simpler and easier to read, hiding non-essential elements.'
+    label: 'Simplify',
+    request: 'Make this page simpler and easier to read, hiding non-essential elements.',
+  },
+  {
+    id: 'summarize',
+    icon: 'src/assets/icons/summarize.svg',
+    label: 'Summarize',
+    request: 'Summarize the main content of this page clearly and concisely.',
   },
   {
     id: 'translate',
-    label: 'Translate',
     icon: 'src/assets/icons/translate.svg',
-    request: 'Translate the main content of this page to Spanish.'
+    label: 'Translate',
+    request: 'Translate the main content of this page to Spanish.',
   },
-  {
-    id: 'explain',
-    label: 'Explain',
-    icon: 'src/assets/icons/explain.svg',
-    request: 'Explain the main content of this page in simple terms.'
-  }
 ]);
 
+// =============================================================================
+// Factory function
+// =============================================================================
+
+/**
+ * Creates a standardized user request message object.
+ *
+ * @param {object} params - The request parameters.
+ * @param {string} params.mode - The request mode ('preset' or 'natural_language').
+ * @param {string} params.request - The user's request text.
+ * @param {string|null} [params.presetId=null] - The preset identifier, if applicable.
+ * @returns {object} The formatted message object with type and payload.
+ * @example
+ * const message = createUserRequest({
+ *   mode: 'preset',
+ *   request: 'Summarize this page',
+ *   presetId: 'summarize',
+ * });
+ */
 export function createUserRequest({ mode, request, presetId = null }) {
   return {
-    type: MESSAGE_TYPES.USER_REQUEST,
     payload: {
+      createdAt: new Date().toISOString(),
       mode,
-      request,
       presetId,
-      createdAt: new Date().toISOString()
-    }
+      request,
+    },
+    type: MESSAGE_TYPES.USER_REQUEST,
   };
 }
