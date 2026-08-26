@@ -6,36 +6,59 @@
 const PANEL_ID = 'page-adapter-panel';
 const STYLE_MARKER = 'page-adapter-injected';
 
-// --- Load marked (UMD) ---
+// --- Debug mode ---
+const DEBUG_SUMMARIZE = false;
+
+// --- Load marked (ESM + fallback UMD) ---
 let markedLoaded = false;
 let markedLib = null;
 
 async function loadMarked() {
   if (markedLoaded) return markedLib;
-  return new Promise((resolve, reject) => {
-    if (typeof window.marked !== 'undefined') {
-      markedLoaded = true;
-      markedLib = window.marked;
-      resolve(markedLib);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('src/lib/marked.umd.js');
-    script.onload = () => {
-      markedLoaded = true;
-      markedLib = window.marked;
-      resolve(markedLib);
-    };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
+
+  try {
+    // Intenta cargar la versión ESM mediante import() dinámico
+    const module = await import(chrome.runtime.getURL('src/lib/marked.esm.js'));
+    markedLib = module;
+    markedLoaded = true;
+    console.log('[Page Adapter] marked loaded via ESM import');
+    return markedLib;
+  } catch (err) {
+    console.warn('[Page Adapter] ESM import failed, falling back to UMD:', err);
+
+    // Fallback: cargar UMD inyectando script en la página
+    return new Promise((resolve, reject) => {
+      if (typeof window.marked !== 'undefined') {
+        markedLib = window.marked;
+        markedLoaded = true;
+        resolve(markedLib);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL('src/lib/marked.umd.js');
+      script.onload = () => {
+        markedLib = window.marked;
+        markedLoaded = true;
+        console.log('[Page Adapter] marked loaded via UMD script');
+        resolve(markedLib);
+      };
+      script.onerror = (error) => {
+        console.error('[Page Adapter] Failed to load UMD script:', error);
+        reject(error);
+      };
+      document.head.appendChild(script);
+    });
+  }
 }
 
 function renderMarkdown(text) {
-  if (markedLib && typeof markedLib.parse === 'function') {
-    return markedLib.parse(text);
+  // Usar markedLib (ESM o UMD)
+  const markdown = markedLib || window.marked;
+  if (markdown && typeof markdown.parse === 'function') {
+    return markdown.parse(text, { gfm: true, breaks: true });
   }
-  // Fallback: convert newlines to <br>
+  // Fallback: convertir saltos de línea a <br>
   return text.replace(/\n/g, '<br>');
 }
 
@@ -224,14 +247,17 @@ function showNotification(text) {
 
 // --- AI summarize and chat ---
 async function applySummarize() {
+  console.log('[applySummarize] Starting...');
+  await loadMarked();
+  console.log('[applySummarize] markedLib:', markedLib);
+
   const text = extractMainText();
   const title = document.title;
 
-  // Create a floating window with a loading message
   const floatingWindow = createFloatingWindow(
     'AI Summary',
     `<p style="color: #6b7280;">Generating summary...</p>`,
-    true // with chat
+    true
   );
   document.body.appendChild(floatingWindow);
 
@@ -241,13 +267,65 @@ async function applySummarize() {
   const input = floatingWindow.querySelector('.page-adapter-chat-input');
   const sendBtn = floatingWindow.querySelector('.page-adapter-chat-send');
 
-  // Update messages container with initial loading message
-  messagesContainer.innerHTML = `
-    <div class="page-adapter-chat-message assistant">
-      <div class="page-adapter-chat-bubble">Generating summary...</div>
-    </div>
-  `;
+  if (messagesContainer) {
+    messagesContainer.innerHTML = `
+      <div class="page-adapter-chat-message assistant">
+        <div class="page-adapter-chat-bubble">Generating summary...</div>
+      </div>
+    `;
+  }
 
+  // --- MODO DE DEPURACIÓN ---
+  if (DEBUG_SUMMARIZE) {
+    console.log('[applySummarize] DEBUG mode: using test markdown');
+
+    const testMarkdown = `
+# Test Title
+
+This is a **bold text** and *italic text*.
+
+- List item 1
+- List item 2
+  - Subelement block:
+  \`\`\`
+  function test() {
+    console.log("Hello, world!");
+  }
+  \`\`\`
+
+[Link to example](https://example.com)
+
+\`Inline code\`
+
+\`\`\`
+Code block
+\`\`\`
+    `;
+
+    if (messagesContainer) {
+      messagesContainer.innerHTML = '';
+      // Pequeño retraso para asegurar que el DOM se actualice
+      setTimeout(() => {
+        addMessage(messagesContainer, 'assistant', testMarkdown);
+        addMessage(
+          messagesContainer,
+          'assistant',
+          '⚠️ **Debug mode enabled** – this is a sample text to test Markdown rendering.'
+        );
+
+        if (input && sendBtn) {
+          input.disabled = false;
+          sendBtn.disabled = false;
+          input.focus();
+        }
+
+        setupChatHandlers(messagesContainer, input, sendBtn, text);
+      }, 50);
+    }
+    return;
+  }
+
+  // --- Flujo normal con IA ---
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'SUMMARIZE_REQUEST',
@@ -258,77 +336,84 @@ async function applySummarize() {
       throw new Error(response?.error || 'Failed to generate summary.');
     }
 
-    // Replace loading with summary
-    messagesContainer.innerHTML = '';
-    addMessage(
-      messagesContainer,
-      'assistant',
-      response.summary,
-      'assistant'
-    );
-
-    // Enable chat input
-    input.disabled = false;
-    sendBtn.disabled = false;
-    input.focus();
-
-    // Define send function for chat
-    async function sendQuestion() {
-      const question = input.value.trim();
-      if (!question) return;
-      addMessage(messagesContainer, 'user', question, 'user');
-      input.value = '';
-      input.disabled = true;
-      sendBtn.disabled = true;
-
-      try {
-        const chatResponse = await chrome.runtime.sendMessage({
-          type: 'CHAT_QUESTION',
-          payload: { question, context: text },
-        });
-        if (!chatResponse?.ok) {
-          throw new Error(chatResponse?.error || 'Error in response.');
-        }
-        addMessage(
-          messagesContainer,
-          'assistant',
-          chatResponse.answer,
-          'assistant'
-        );
-      } catch (error) {
-        addMessage(
-          messagesContainer,
-          'assistant',
-          `Error: ${error.message}`,
-          'assistant'
-        );
-      } finally {
+    if (messagesContainer) {
+      messagesContainer.innerHTML = '';
+      addMessage(messagesContainer, 'assistant', response.summary);
+      if (input && sendBtn) {
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
       }
+      setupChatHandlers(messagesContainer, input, sendBtn, text);
     }
-
-    // Attach event listeners
-    sendBtn.addEventListener('click', sendQuestion);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendQuestion();
-      }
-    });
   } catch (error) {
-    // Show error in the messages container
-    messagesContainer.innerHTML = `
-      <div class="page-adapter-chat-message error">
-        Failed to generate AI summary. Please try again later.<br>
-        <small>${error.message}</small>
-      </div>
-    `;
+    console.error('[applySummarize] Error:', error);
+    if (messagesContainer) {
+      messagesContainer.innerHTML = `
+        <div class="page-adapter-chat-message error">
+          Failed to generate AI summary. Please try again later.<br>
+          <small>${error.message}</small>
+        </div>
+      `;
+    }
   }
 }
 
+// --- Configuración del chat ---
+function setupChatHandlers(messagesContainer, input, sendBtn, contextText) {
+  if (!messagesContainer || !input || !sendBtn) {
+    console.warn('[setupChatHandlers] Missing elements, skipping');
+    return;
+  }
+
+  async function sendQuestion() {
+    const question = input.value.trim();
+    if (!question) return;
+    addMessage(messagesContainer, 'user', question);
+    input.value = '';
+    input.disabled = true;
+    sendBtn.disabled = true;
+
+    try {
+      const chatResponse = await chrome.runtime.sendMessage({
+        type: 'CHAT_QUESTION',
+        payload: { question, context: contextText },
+      });
+      if (!chatResponse?.ok) {
+        throw new Error(chatResponse?.error || 'Error in response.');
+      }
+      addMessage(messagesContainer, 'assistant', chatResponse.answer);
+    } catch (error) {
+      addMessage(
+        messagesContainer,
+        'assistant',
+        `Error: ${error.message}`
+      );
+    } finally {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendQuestion();
+    }
+  }
+
+  sendBtn.removeEventListener('click', sendQuestion);
+  input.removeEventListener('keydown', handleKeydown);
+
+  sendBtn.addEventListener('click', sendQuestion);
+  input.addEventListener('keydown', handleKeydown);
+}
+
+// --- Añadir mensaje al chat ---
 function addMessage(container, role, text) {
+  if (!container) return;
+
   const msg = document.createElement('div');
   msg.className = `page-adapter-chat-message ${role}`;
 
@@ -343,6 +428,7 @@ function addMessage(container, role, text) {
   container.scrollTop = container.scrollHeight;
 }
 
+// --- Creación de la ventana flotante ---
 function createFloatingWindow(title, initialContent = '', withChat = false) {
   const wrapper = document.createElement('div');
   wrapper.className = 'page-adapter-floating-window';
@@ -365,7 +451,7 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
     user-select: none;
   `;
 
-  // Title bar (draggable)
+  // Barra de título (arrastrable)
   const titleBar = document.createElement('div');
   titleBar.style.cssText = `
     display: flex;
@@ -383,7 +469,7 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
   `;
   wrapper.appendChild(titleBar);
 
-  // Content area
+  // Área de contenido
   const contentArea = document.createElement('div');
   contentArea.style.cssText = `
     flex: 1;
@@ -393,7 +479,7 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
   `;
   wrapper.appendChild(contentArea);
 
-  // If chat mode, build chat UI
+  // Modo chat
   if (withChat) {
     const messages = document.createElement('div');
     messages.className = 'page-adapter-chat-messages';
@@ -444,27 +530,24 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
     inputArea.append(input, sendBtn);
     contentArea.appendChild(inputArea);
 
-    // Store references for later use
     wrapper._messages = messages;
     wrapper._input = input;
     wrapper._sendBtn = sendBtn;
   } else {
-    // Simple content
     const contentDiv = document.createElement('div');
     contentDiv.innerHTML = initialContent;
     contentArea.appendChild(contentDiv);
   }
 
-  // Close button logic
+  // Cerrar
   const closeBtn = titleBar.querySelector('.page-adapter-close');
   closeBtn.addEventListener('click', () => wrapper.remove());
 
-  // Drag logic
+  // Arrastre
   let isDragging = false;
   let startX, startY, initialX, initialY;
 
   const onDragStart = (e) => {
-    // Only drag if the target is the title bar itself or its children (except the close button)
     if (e.target.closest('.page-adapter-close')) return;
     isDragging = true;
     const rect = wrapper.getBoundingClientRect();
@@ -485,7 +568,7 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
     const dy = e.clientY - startY;
     wrapper.style.left = `${initialX + dx}px`;
     wrapper.style.top = `${initialY + dy}px`;
-    wrapper.style.transform = 'none'; // remove centering transform while dragging
+    wrapper.style.transform = 'none';
   };
 
   const onDragEnd = () => {
@@ -500,7 +583,7 @@ function createFloatingWindow(title, initialContent = '', withChat = false) {
   return wrapper;
 }
 
-// --- Existing functions (context, etc.) ---
+// --- Funciones de contexto ---
 function extractPageContext() {
   const title = document.title;
   const url = location.href;

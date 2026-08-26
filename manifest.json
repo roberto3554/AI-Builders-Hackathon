@@ -30,7 +30,7 @@
     }
   ],
   "web_accessible_resources": [{
-    "resources": ["src/lib/marked.umd.js"],
+    "resources": ["src/lib/marked.umd.js", "src/lib/marked.esm.js"],
     "matches": ["<all_urls>"]
   }]
 }
