@@ -21,6 +21,25 @@ export default {
   'popup.error.generic': 'An error occurred.',
 
   // ===========================================================================
+  // Popup – Preferences
+  // ===========================================================================
+  'popup.preferences.language': 'Language',
+  'popup.preferences.theme': 'Theme',
+  'popup.preferences.theme_system': 'System',
+  'popup.preferences.theme_light': 'Light',
+  'popup.preferences.theme_dark': 'Dark',
+  'popup.preferences.language_en': 'English',
+  'popup.preferences.language_es': 'Spanish',
+
+  // ===========================================================================
+  // Popup – Presets
+  // ===========================================================================
+  'preset.simplify': 'Simplify',
+  'preset.summarize': 'Summarize',
+  'preset.explain': 'Explain',
+  'preset.translate': 'Translate',
+
+  // ===========================================================================
   // Content – Summaries
   // ===========================================================================
   'summary.generating': 'Generating summary…',

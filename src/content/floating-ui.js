@@ -67,6 +67,8 @@ export function showOverlay(title, content) {
  * @param {boolean} withChat - Whether to include a chat input area.
  * @param {number} maxWidth - Maximum width in pixels.
  * @param {string} maxHeight - Maximum height (CSS value).
+ * @param {string} [chatPlaceholder] - Placeholder text for the chat input (if withChat).
+ * @param {string} [chatButtonText] - Text for the chat send button (if withChat).
  * @returns {HTMLElement} The wrapper element containing the window.
  */
 export function createFloatingWindow(
@@ -74,7 +76,9 @@ export function createFloatingWindow(
   initialContent = '',
   withChat = false,
   maxWidth = 600,
-  maxHeight = '80vh'
+  maxHeight = '80vh',
+  chatPlaceholder = 'Ask a question about the content…',
+  chatButtonText = 'Ask'
 ) {
   const wrapper = document.createElement('div');
   wrapper.className = 'page-adapter-floating-window';
@@ -114,12 +118,12 @@ export function createFloatingWindow(
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'page-adapter-chat-input';
-    input.placeholder = 'Ask a question about the content…';
+    input.placeholder = chatPlaceholder;
     input.disabled = true;
 
     const sendButton = document.createElement('button');
     sendButton.className = 'page-adapter-chat-send';
-    sendButton.textContent = 'Ask';
+    sendButton.textContent = chatButtonText;
     sendButton.disabled = true;
 
     inputArea.append(input, sendButton);

@@ -5,7 +5,7 @@
  * Used by: popup.html.
  */
 
-import { PRESETS } from '../shared/constants.js';
+import { PRESETS, MESSAGE_TYPES } from '../shared/constants.js';
 import { createUserRequest } from '../shared/messages.js';
 import { t, setLocale } from '../shared/locale.js';
 
@@ -15,7 +15,7 @@ import { t, setLocale } from '../shared/locale.js';
 
 const MAX_REQUEST_LENGTH = 2000;
 const STATUS_DISPLAY_MS = 350;
-const DEFAULT_STATUS_MESSAGE = t('popup.status.default');
+const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
 
 // =============================================================================
 // DOM references
@@ -26,28 +26,122 @@ const requestInput = document.querySelector('#request');
 const adaptButton = document.querySelector('#adapt');
 const statusElement = document.querySelector('#status');
 const counterElement = document.querySelector('#counter');
+const languageSelect = document.querySelector('#language-select');
+const themeSelect = document.querySelector('#theme-select');
 
 // =============================================================================
-// Initialization
+// Preferences helpers
 // =============================================================================
 
-// Set locale (default is 'en'; could be changed based on browser language).
-setLocale('en');
+/**
+ * Loads user preferences from storage.
+ *
+ * @returns {Promise<object>} An object with `theme` and `locale` properties.
+ */
+async function loadPreferences() {
+  const result = await chrome.storage.local.get(STORAGE_PREFS_KEY);
+  return result[STORAGE_PREFS_KEY] || { theme: 'system', locale: 'en' };
+}
 
-// Populate static text from locale.
-document.querySelector('#popup-title').textContent = t('popup.title');
-document.querySelector('#popup-subtitle').textContent = t('popup.subtitle');
-document.querySelector('#quick-actions-label').textContent = t('popup.quick_actions');
-document.querySelector('#request-label').textContent = t('popup.write_need');
-requestInput.placeholder = t('popup.placeholder');
-adaptButton.textContent = t('popup.adapt_button');
-statusElement.textContent = DEFAULT_STATUS_MESSAGE;
+/**
+ * Saves user preferences to storage.
+ *
+ * @param {object} prefs - The preferences object.
+ * @param {string} prefs.theme - 'system', 'light', or 'dark'.
+ * @param {string} prefs.locale - 'en' or 'es'.
+ * @returns {Promise<void>}
+ */
+async function savePreferences(prefs) {
+  await chrome.storage.local.set({ [STORAGE_PREFS_KEY]: prefs });
+}
 
-renderPresets();
-updateCounter();
+/**
+ * Applies the selected theme to the popup body.
+ *
+ * @param {string} theme - 'system', 'light', or 'dark'.
+ */
+function applyTheme(theme) {
+  document.body.classList.remove('theme-dark', 'theme-light');
+  if (theme === 'dark') {
+    document.body.classList.add('theme-dark');
+  } else if (theme === 'light') {
+    document.body.classList.add('theme-light');
+  }
+  // 'system' → no class, media query prevails
+}
 
-requestInput.addEventListener('input', updateCounter);
-adaptButton.addEventListener('click', submitNaturalLanguage);
+/**
+ * Returns the default status message for the current locale.
+ *
+ * @returns {string} The localized default status message.
+ */
+function getDefaultStatusMessage() {
+  return t('popup.status.default');
+}
+
+/**
+ * Applies the selected locale to the popup UI.
+ *
+ * @param {string} locale - 'en' or 'es'.
+ */
+function applyLocale(locale) {
+  setLocale(locale);
+  updatePopupTexts();
+  updateSelectOptions();
+  // Refresh the status message with the new locale.
+  setStatus(getDefaultStatusMessage());
+  // Regenerate preset buttons with the new locale.
+  renderPresets();
+}
+
+/**
+ * Updates all static text elements in the popup with current locale.
+ */
+function updatePopupTexts() {
+  document.querySelector('#popup-title').textContent = t('popup.title');
+  document.querySelector('#popup-subtitle').textContent = t('popup.subtitle');
+  document.querySelector('#quick-actions-label').textContent = t('popup.quick_actions');
+  document.querySelector('#request-label').textContent = t('popup.write_need');
+  requestInput.placeholder = t('popup.placeholder');
+  adaptButton.textContent = t('popup.adapt_button');
+  document.querySelector('#language-label').textContent = t('popup.preferences.language');
+  document.querySelector('#theme-label').textContent = t('popup.preferences.theme');
+}
+
+/**
+ * Updates the options of the language and theme selects with translated labels.
+ */
+function updateSelectOptions() {
+  const langOptions = languageSelect.querySelectorAll('option');
+  langOptions.forEach((opt) => {
+    const key = `popup.preferences.language_${opt.value}`;
+    opt.textContent = t(key);
+  });
+
+  const themeOptions = themeSelect.querySelectorAll('option');
+  themeOptions.forEach((opt) => {
+    const key = `popup.preferences.theme_${opt.value}`;
+    opt.textContent = t(key);
+  });
+}
+
+/**
+ * Sends a message to the content script of the active tab.
+ *
+ * @param {object} message - The message to send.
+ * @returns {Promise<void>}
+ */
+async function sendMessageToActiveTab(message) {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (tab?.id) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, message);
+    } catch (error) {
+      console.debug('[Page Adapter] Could not send message to content script:', error);
+    }
+  }
+}
 
 // =============================================================================
 // Rendering functions
@@ -58,6 +152,9 @@ adaptButton.addEventListener('click', submitNaturalLanguage);
  * Each button triggers a user request when clicked.
  */
 function renderPresets() {
+  // Clear container before re-rendering to avoid duplicates.
+  presetsContainer.innerHTML = '';
+
   for (const preset of PRESETS) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -65,9 +162,13 @@ function renderPresets() {
 
     const iconUrl = chrome.runtime.getURL(preset.icon || '');
 
+    // Use translation for the preset label.
+    const labelKey = `preset.${preset.id}`;
+    const labelText = t(labelKey);
+
     button.innerHTML = `
       <span class="preset-icon"><img src="${iconUrl}" alt="" /></span>
-      <span>${escapeHtml(preset.label)}</span>
+      <span>${escapeHtml(labelText)}</span>
     `;
 
     button.addEventListener('click', () => {
@@ -193,3 +294,49 @@ function escapeHtml(value) {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 }
+
+// =============================================================================
+// Initialization
+// =============================================================================
+
+(async function init() {
+  // Load and apply preferences
+  const prefs = await loadPreferences();
+  applyTheme(prefs.theme);
+  applyLocale(prefs.locale);
+  languageSelect.value = prefs.locale;
+  themeSelect.value = prefs.theme;
+
+  // Render presets is now called inside applyLocale, so we don't call it here.
+  // But we still need to update the counter and set up event listeners.
+  updateCounter();
+
+  // Event listeners for user actions
+  requestInput.addEventListener('input', updateCounter);
+  adaptButton.addEventListener('click', submitNaturalLanguage);
+
+  // Event listeners for preference changes
+  languageSelect.addEventListener('change', async (e) => {
+    const locale = e.target.value;
+    const newPrefs = await loadPreferences();
+    newPrefs.locale = locale;
+    await savePreferences(newPrefs);
+    applyLocale(locale);
+    await sendMessageToActiveTab({
+      type: MESSAGE_TYPES.SET_LOCALE,
+      payload: { locale },
+    });
+  });
+
+  themeSelect.addEventListener('change', async (e) => {
+    const theme = e.target.value;
+    const newPrefs = await loadPreferences();
+    newPrefs.theme = theme;
+    await savePreferences(newPrefs);
+    applyTheme(theme);
+    await sendMessageToActiveTab({
+      type: MESSAGE_TYPES.SET_THEME,
+      payload: { theme },
+    });
+  });
+})();

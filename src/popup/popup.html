@@ -35,6 +35,24 @@
     </section>
 
     <div id="status" class="status" aria-live="polite">Type a need or select a quick action.</div>
+
+    <section class="section preferences">
+      <div class="preference-row">
+        <label for="language-select" id="language-label">Language</label>
+        <select id="language-select">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+        </select>
+      </div>
+      <div class="preference-row">
+        <label for="theme-select" id="theme-label">Theme</label>
+        <select id="theme-select">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </section>
   </main>
 
   <script type="module" src="./popup.js"></script>

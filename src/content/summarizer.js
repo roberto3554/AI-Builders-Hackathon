@@ -9,7 +9,7 @@ import { createFloatingWindow, addMessage } from './floating-ui.js';
 import { extractMainText } from './page-context.js';
 import { t } from '../shared/locale.js';
 
-const DEBUG_SUMMARIZE = false;
+const DEBUG_SUMMARIZE = true;
 
 /**
  * Starts the summarize flow: loads marked, creates a floating window,
@@ -24,10 +24,15 @@ export async function applySummarize() {
   const pageText = extractMainText();
   const pageTitle = document.title;
 
+  // Pass translated strings for the chat UI.
   const floatingWindow = createFloatingWindow(
     t('summary.generating'),
     '',
-    true // withChat
+    true, // withChat
+    600,
+    '80vh',
+    t('chat.input_placeholder'),
+    t('chat.send_button')
   );
 
   document.body.appendChild(floatingWindow);

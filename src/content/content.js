@@ -16,6 +16,47 @@ if (!document.documentElement.dataset.pageAdapterInjected) {
 }
 
 // =============================================================================
+// Theme & locale handling
+// =============================================================================
+
+const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
+
+/**
+ * Loads the locale module dynamically.
+ *
+ * @returns {Promise<object>} The locale module containing `setLocale` and `t`.
+ */
+async function loadLocaleModule() {
+  // `import()` works because the module is declared as web_accessible_resource.
+  return import('../shared/locale.js');
+}
+
+/**
+ * Applies the theme by adding/removing classes on the document body.
+ *
+ * @param {string} theme - 'system', 'light', or 'dark'.
+ */
+function applyTheme(theme) {
+  document.body.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
+  if (theme === 'dark') {
+    document.body.classList.add('page-adapter-theme-dark');
+  } else if (theme === 'light') {
+    document.body.classList.add('page-adapter-theme-light');
+  }
+  // 'system' → no class, media query prevails
+}
+
+/**
+ * Loads user preferences from storage.
+ *
+ * @returns {Promise<object>} An object with `theme` and `locale` properties.
+ */
+async function loadPreferences() {
+  const result = await chrome.storage.local.get(STORAGE_PREFS_KEY);
+  return result[STORAGE_PREFS_KEY] || { theme: 'system', locale: 'en' };
+}
+
+// =============================================================================
 // Message listener
 // =============================================================================
 
@@ -44,6 +85,19 @@ async function onRuntimeMessage(message, sender, sendResponse) {
       case 'PING': {
         sendResponse({ ok: true });
         return;
+      }
+
+      case 'SET_THEME': {
+        applyTheme(message.payload.theme);
+        sendResponse({ ok: true });
+        return true;
+      }
+
+      case 'SET_LOCALE': {
+        const { setLocale } = await loadLocaleModule();
+        setLocale(message.payload.locale);
+        sendResponse({ ok: true });
+        return true;
       }
 
       case 'APPLY_TRANSFORMATION': {
@@ -77,3 +131,16 @@ async function onRuntimeMessage(message, sender, sendResponse) {
 
 // Register listener.
 chrome.runtime.onMessage.addListener(onRuntimeMessage);
+
+// =============================================================================
+// Initialize – apply stored preferences
+// =============================================================================
+
+(async function initContent() {
+  const prefs = await loadPreferences();
+  applyTheme(prefs.theme);
+
+  // Load locale module and set the locale.
+  const { setLocale } = await loadLocaleModule();
+  setLocale(prefs.locale);
+})();

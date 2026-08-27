@@ -32,6 +32,15 @@ export function setLocale(locale) {
 }
 
 /**
+ * Retrieves the current locale code.
+ *
+ * @returns {string} The current locale code.
+ */
+export function getLocale() {
+  return currentLocale;
+}
+
+/**
  * Retrieves a localized string by key, with optional interpolation.
  *
  * @param {string} key - The key in the locale object.

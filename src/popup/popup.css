@@ -58,6 +58,39 @@
 }
 
 /* ============================================================================
+   Theme override classes (applied to body)
+   ============================================================================ */
+body.theme-dark {
+  --bg-surface: #1e293b;
+  --bg-subtle: #0f172a;
+  --bg-input: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #475569;
+  --border-input: #475569;
+  --border-focus: #60a5fa;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --shadow-popup: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+
+body.theme-light {
+  --bg-surface: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-input: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-color: #e5e7eb;
+  --border-input: #d1d5db;
+  --border-focus: #60a5fa;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --shadow-popup: 0 18px 50px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================================
    High contrast mode (applied via class on body)
    ============================================================================ */
 body.high-contrast {
@@ -174,7 +207,7 @@ h2 {
 .preset-icon {
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
-  color: var(--primary);
+  color: var(--text-primary);
   display: grid;
   font-size: 12px;
   font-weight: 700;
@@ -296,4 +329,43 @@ textarea:disabled {
   .status.success {
     color: #4ade80;
   }
+}
+
+/* ============================================================================
+   Preferences
+   ============================================================================ */
+.preferences {
+  border-top: 1px solid var(--border-color);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+}
+
+.preference-row {
+  align-items: center;
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.preference-row label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.preference-row select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.preference-row select:focus {
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-focus);
 }

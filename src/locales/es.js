@@ -21,6 +21,25 @@ export default {
   'popup.error.generic': 'Ocurrió un error.',
 
   // ===========================================================================
+  // Popup – Preferences
+  // ===========================================================================
+  'popup.preferences.language': 'Idioma',
+  'popup.preferences.theme': 'Tema',
+  'popup.preferences.theme_system': 'Sistema',
+  'popup.preferences.theme_light': 'Claro',
+  'popup.preferences.theme_dark': 'Oscuro',
+  'popup.preferences.language_en': 'Inglés',
+  'popup.preferences.language_es': 'Español',
+
+  // ===========================================================================
+  // Popup – Presets
+  // ===========================================================================
+  'preset.simplify': 'Simplificar',
+  'preset.summarize': 'Resumir',
+  'preset.explain': 'Explicar',
+  'preset.translate': 'Traducir',
+
+  // ===========================================================================
   // Content – Summaries
   // ===========================================================================
   'summary.generating': 'Generando resumen…',

@@ -60,6 +60,43 @@
 }
 
 /* ============================================================================
+   Theme override classes (applied to body)
+   ============================================================================ */
+body.page-adapter-theme-dark {
+  --pa-bg-surface: #1e293b;
+  --pa-bg-subtle: #0f172a;
+  --pa-bg-elevated: #334155;
+  --pa-bg-input: #334155;
+  --pa-text-primary: #f1f5f9;
+  --pa-text-secondary: #94a3b8;
+  --pa-text-muted: #64748b;
+  --pa-text-light: #ffffff;
+  --pa-border-color: #475569;
+  --pa-border-input: #475569;
+  --pa-border-focus: #60a5fa;
+  --pa-primary: #3b82f6;
+  --pa-primary-hover: #2563eb;
+  --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+
+body.page-adapter-theme-light {
+  --pa-bg-surface: #ffffff;
+  --pa-bg-subtle: #f9fafb;
+  --pa-bg-elevated: #ffffff;
+  --pa-bg-input: #ffffff;
+  --pa-text-primary: #1f2937;
+  --pa-text-secondary: #6b7280;
+  --pa-text-muted: #9ca3af;
+  --pa-text-light: #ffffff;
+  --pa-border-color: #e5e7eb;
+  --pa-border-input: #d1d5db;
+  --pa-border-focus: #60a5fa;
+  --pa-primary: #2563eb;
+  --pa-primary-hover: #1d4ed8;
+  --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================================
    High contrast mode (applied via class on body)
    ============================================================================ */
 body.page-adapter-high-contrast {
