@@ -143,4 +143,8 @@ chrome.runtime.onMessage.addListener(onRuntimeMessage);
   // Load locale module and set the locale.
   const { setLocale } = await loadLocaleModule();
   setLocale(prefs.locale);
+
+  // Inject the floating button.
+  const { createFloatingButton } = await import('./floating-button.js');
+  createFloatingButton();
 })();

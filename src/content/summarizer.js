@@ -9,7 +9,7 @@ import { createFloatingWindow, addMessage } from './floating-ui.js';
 import { extractMainText } from './page-context.js';
 import { t } from '../shared/locale.js';
 
-const DEBUG_SUMMARIZE = true;
+const DEBUG_SUMMARIZE = false;
 
 /**
  * Starts the summarize flow: loads marked, creates a floating window,

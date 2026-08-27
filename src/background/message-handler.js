@@ -68,6 +68,11 @@ export function onRuntimeMessage(message, sender, sendResponse) {
           });
         return true;
 
+      case MESSAGE_TYPES.OPEN_POPUP:
+        chrome.action.openPopup();
+        sendResponse({ ok: true });
+        return;
+
       case MESSAGE_TYPES.PING:
         sendResponse({ ok: true });
         return;

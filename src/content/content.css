@@ -474,3 +474,72 @@ body.page-adapter-high-contrast {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ============================================================================
+   Floating button (power)
+   ============================================================================ */
+#page-adapter-floating-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2147483647; /* Max z-index to stay above everything */
+  width: 60px;
+  height: 60px;
+  border: 2px solid var(--pa-border-color);
+  border-radius: 50%;
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  box-shadow: var(--pa-shadow-panel);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  padding: 0;
+  cursor: grab;
+  user-select: none; /* Prevent text selection during drag */
+}
+
+#page-adapter-floating-button:hover {
+  cursor: grab;
+}
+
+#page-adapter-floating-button:active {
+  cursor: grabbing;
+}
+
+#page-adapter-floating-button:hover {
+  background: var(--pa-bg-subtle);
+  transform: scale(1.05);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+#page-adapter-floating-button:focus-visible {
+  outline: 3px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+#page-adapter-floating-button svg {
+  width: 32px;
+  height: 32px;
+  display: block;
+  stroke: currentColor;
+}
+
+/* High contrast adjustments */
+body.page-adapter-high-contrast #page-adapter-floating-button {
+  border-width: 3px;
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  box-shadow: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  #page-adapter-floating-button {
+    transition: none;
+  }
+  #page-adapter-floating-button:hover {
+    transform: none;
+  }
+}
