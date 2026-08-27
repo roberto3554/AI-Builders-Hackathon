@@ -148,26 +148,51 @@ async function sendMessageToActiveTab(message) {
 // =============================================================================
 
 /**
+ * Fetches the content of an SVG file.
+ *
+ * @param {string} url - The URL of the SVG.
+ * @returns {Promise<string>} The SVG content as a string.
+ * @throws Will throw if the fetch fails.
+ */
+async function fetchSvgContent(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to load SVG: ${url}`);
+  }
+  return response.text();
+}
+
+/**
  * Renders the preset buttons in the popup.
  * Each button triggers a user request when clicked.
+ * Icons are loaded inline to inherit theme colors via currentColor.
  */
-function renderPresets() {
+async function renderPresets() {
   // Clear container before re-rendering to avoid duplicates.
   presetsContainer.innerHTML = '';
 
   for (const preset of PRESETS) {
+    const iconUrl = chrome.runtime.getURL(preset.icon || '');
+    let svgContent = '';
+
+    try {
+      svgContent = await fetchSvgContent(iconUrl);
+    } catch (error) {
+      console.warn('[Page Adapter] Could not load icon:', error);
+      // Fallback: show a simple text placeholder.
+      svgContent = `<span style="font-size:18px;">${preset.id[0].toUpperCase()}</span>`;
+    }
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'preset';
-
-    const iconUrl = chrome.runtime.getURL(preset.icon || '');
 
     // Use translation for the preset label.
     const labelKey = `preset.${preset.id}`;
     const labelText = t(labelKey);
 
     button.innerHTML = `
-      <span class="preset-icon"><img src="${iconUrl}" alt="" /></span>
+      <span class="preset-icon">${svgContent}</span>
       <span>${escapeHtml(labelText)}</span>
     `;
 
@@ -307,8 +332,10 @@ function escapeHtml(value) {
   languageSelect.value = prefs.locale;
   themeSelect.value = prefs.theme;
 
-  // Render presets is now called inside applyLocale, so we don't call it here.
-  // But we still need to update the counter and set up event listeners.
+  // Note: renderPresets() is already called inside applyLocale().
+  // No need to call it again here.
+
+  // Update counter and set up event listeners
   updateCounter();
 
   // Event listeners for user actions
