@@ -334,6 +334,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
 
   // Configure language and theme options
   const langOptions = [
+    { value: 'system', label: t('popup.preferences.language_system') },
     { value: 'en', label: t('popup.preferences.language_en') },
     { value: 'es', label: t('popup.preferences.language_es') },
   ];

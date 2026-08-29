@@ -34,6 +34,7 @@ export default {
   'popup.preferences.theme_dark': 'Dark',
   'popup.preferences.language_en': 'English',
   'popup.preferences.language_es': 'Spanish',
+  'popup.preferences.language_system': 'System',
 
   // ===========================================================================
   // Popup – Presets
@@ -42,6 +43,12 @@ export default {
   'preset.summarize': 'Summarize',
   'preset.explain': 'Explain',
   'preset.translate': 'Translate',
+
+  // ===========================================================================
+  // Popup – Info
+  // ===========================================================================
+  'popup.info.description': 'This extension allows you to adapt web pages to your needs. To use it, click the power button that appears on the page.',
+  'popup.info.version': 'Version: {{version}}',
 
   // ===========================================================================
   // Content – Summaries

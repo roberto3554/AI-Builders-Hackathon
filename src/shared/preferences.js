@@ -19,7 +19,7 @@ export const DEFAULT_PREFERENCES = Object.freeze({
 });
 
 const VALID_THEMES = new Set(['system', 'light', 'dark']);
-const VALID_LOCALES = new Set(['en', 'es']);
+const VALID_LOCALES = new Set(['system', 'en', 'es']);
 
 // =============================================================================
 // Helpers
