@@ -143,6 +143,8 @@ export function createFloatingWindow(
 ) {
   const wrapper = document.createElement('div');
   wrapper.className = 'page-adapter-floating-window';
+  wrapper._isDragging = false;
+  wrapper._dragMoved = false;
 
   // Determine width and height with robust validation
   let width;
@@ -251,6 +253,8 @@ export function createFloatingWindow(
     wrapper.style.left = initialLeftPos + 'px';
     wrapper.style.top = initialTopPos + 'px';
     wrapper.style.transform = 'none';
+    wrapper._isDragging = true;
+    wrapper._dragMoved = false;
 
     wrapper.style.cursor = 'grabbing';
     wrapper.style.transition = 'none';
@@ -266,6 +270,9 @@ export function createFloatingWindow(
     const deltaY = event.clientY - startY;
     let newLeft = initialLeftPos + deltaX;
     let newTop = initialTopPos + deltaY;
+    if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+      wrapper._dragMoved = true;   // movement detected
+    }
 
     const margin = 20;
     const maxX = window.innerWidth - wrapper.offsetWidth - margin;
@@ -287,6 +294,7 @@ export function createFloatingWindow(
     isDragging = false;
     wrapper.style.cursor = '';
     wrapper.style.transition = '';
+    wrapper._isDragging = false;
     document.removeEventListener('mousemove', onDragMove);
     document.removeEventListener('mouseup', onDragEnd);
   }

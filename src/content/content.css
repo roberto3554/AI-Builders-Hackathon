@@ -887,3 +887,93 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   height: 100%;
   fill: var(--pa-text-muted);
 }
+
+/* ============================================================================
+   Title bar
+   ============================================================================ */
+.page-adapter-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
+  background: var(--pa-bg-subtle);
+  cursor: move;
+  border-bottom: 1px solid var(--pa-border-color);
+  flex-shrink: 0;
+  gap: var(--pa-spacing-sm);
+}
+
+.page-adapter-title-text {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--pa-text-primary);
+  flex: 1;
+}
+
+/* Settings toggle button (in title bar) */
+.page-adapter-settings-toggle {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex: 0 0 40px;
+}
+
+.page-adapter-settings-toggle:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-settings-toggle:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-settings-toggle svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+  fill: currentColor;
+}
+
+/* Close button (in title bar) */
+.page-adapter-close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex: 0 0 40px;
+}
+
+.page-adapter-close:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-close:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-close svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+  stroke: currentColor;
+}

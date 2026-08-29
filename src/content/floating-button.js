@@ -16,16 +16,6 @@ const DRAG_THRESHOLD = 5; // pixels to differentiate click from drag
 const BUTTON_VIEWPORT_MARGIN = 20;
 const LEGACY_TOP_LEFT_TOLERANCE = 2;
 
-/**
- * SVG icon for the power button (inline).
- * The icon uses currentColor for proper theming.
- */
-const POWER_SVG = `
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 2v10M18.36 6.64a9 9 0 1 1-12.72 0" />
-</svg>
-`;
-
 // =============================================================================
 // Position persistence helpers
 // =============================================================================
@@ -113,7 +103,21 @@ export function createFloatingButton() {
   button.setAttribute('title', 'Open Page Adapter');
   button.type = 'button';
 
-  button.innerHTML = POWER_SVG;
+  // Load the power SVG icon.
+  const powerIconUrl = chrome.runtime.getURL('src/assets/icons/power.svg');
+  fetch(powerIconUrl)
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to load power icon');
+      return response.text();
+    })
+    .then(svg => {
+      button.innerHTML = svg;
+    })
+    .catch(() => {
+      // Fallback: simple text.
+      button.textContent = '⏻';
+    });
+
   document.body.appendChild(button);
 
   const defaultPosition = getDefaultButtonPosition(button);
@@ -227,15 +231,12 @@ export function createFloatingButton() {
    * Opens the menu window only if the button was not dragged.
    */
   function onClick(event) {
-    // console.debug('[Page Adapter] Botón clickeado. isDragging:', isDragging, 'hasMoved:', hasMoved);
     // If a drag occurred, ignore the click.
     if (isDragging || hasMoved) {
-      // console.debug('[Page Adapter] Ignorando click porque fue arrastre');
       // Reset flags for next interaction.
       hasMoved = false;
       return;
     }
-    // console.debug('[Page Adapter] Abriendo ventana desde click');
     createMenuWindow(button);
   }
 
@@ -244,7 +245,7 @@ export function createFloatingButton() {
 }
 
 // =============================================================================
-// Exports for position management
+// Exports
 // =============================================================================
 
 export { loadButtonPosition, saveButtonPosition };

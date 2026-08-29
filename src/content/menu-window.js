@@ -19,22 +19,11 @@ import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '../shared
 const MAX_REQUEST_LENGTH = 2000;
 
 const DEFAULT_WIDTH = 400;
-const DEFAULT_HEIGHT = 670;
+const DEFAULT_HEIGHT = 550;
 
 const VIEWPORT_MARGIN = 10;
 const BUTTON_SYNC_MARGIN = 20;
 const DEFAULT_BUTTON_SIZE = 60;
-const SETTINGS_ICON_URL = chrome.runtime.getURL('src/assets/icons/settings.svg');
-
-/**
- * SVG icon for the power button (used for the close button).
- * The icon uses currentColor for proper theming.
- */
-const POWER_SVG = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 2v10M18.36 6.64a9 9 0 1 1-12.72 0" />
-  </svg>
-`;
 
 // =============================================================================
 // State
@@ -125,36 +114,11 @@ function buildMenuContent() {
   const container = document.createElement('div');
   container.className = 'page-adapter-menu-container';
 
-  const header = document.createElement('header');
-  header.className = 'page-adapter-menu-header';
-  const headerRow = document.createElement('div');
-  headerRow.className = 'page-adapter-menu-header-row';
-
-  const titleGroup = document.createElement('div');
-  titleGroup.className = 'page-adapter-menu-title-group';
-
-  const title = document.createElement('h1');
-  title.id = 'menu-title';
-  title.textContent = t('popup.title');
-  titleGroup.appendChild(title);
-
+  // Subtitle (the title is now in the title bar)
   const subtitle = document.createElement('p');
-  subtitle.id = 'menu-subtitle';
+  subtitle.className = 'page-adapter-menu-subtitle';
   subtitle.textContent = t('popup.subtitle');
-  titleGroup.appendChild(subtitle);
-
-  const settingsButton = document.createElement('button');
-  settingsButton.id = 'menu-settings-toggle';
-  settingsButton.className = 'page-adapter-settings-toggle';
-  settingsButton.type = 'button';
-  settingsButton.setAttribute('aria-expanded', 'false');
-  settingsButton.setAttribute('aria-controls', 'menu-settings-panel');
-  settingsButton.setAttribute('aria-label', t('popup.preferences.settings'));
-  settingsButton.title = t('popup.preferences.settings');
-
-  headerRow.append(titleGroup, settingsButton);
-  header.appendChild(headerRow);
-  container.appendChild(header);
+  container.appendChild(subtitle);
 
   const settingsPanel = document.createElement('section');
   settingsPanel.id = 'menu-settings-panel';
@@ -301,8 +265,7 @@ function escapeHtml(value) {
 }
 
 function updatePopupTexts(container) {
-  container.querySelector('#menu-title').textContent = t('popup.title');
-  container.querySelector('#menu-subtitle').textContent = t('popup.subtitle');
+  container.querySelector('.page-adapter-menu-subtitle').textContent = t('popup.subtitle');
   container.querySelector('.page-adapter-menu-section h2').textContent = t('popup.quick_actions');
   container.querySelector('.page-adapter-input-label').textContent = t('popup.write_need');
   const textarea = container.querySelector('#menu-request');
@@ -311,8 +274,6 @@ function updatePopupTexts(container) {
   container.querySelector('#language-label').textContent = t('popup.preferences.language');
   container.querySelector('#theme-label').textContent = t('popup.preferences.theme');
   container.querySelector('#model-label').textContent = t('popup.preferences.ollama_model');
-  container.querySelector('#menu-settings-toggle').setAttribute('aria-label', t('popup.preferences.settings'));
-  container.querySelector('#menu-settings-toggle').title = t('popup.preferences.settings');
   container.querySelector('#menu-high-contrast').closest('.page-adapter-toggle-row').querySelector('span').textContent = t('popup.preferences.high_contrast');
   container.querySelector('#menu-simplified-ui').closest('.page-adapter-toggle-row').querySelector('span').textContent = t('popup.preferences.simplified_ui');
 }
@@ -372,7 +333,7 @@ function setStatus(statusElement, message, type = '') {
 // Menu initialization
 // =============================================================================
 
-async function initMenuUI(container, windowElement, floatingButton) {
+async function initMenuUI(container, windowElement, floatingButton, settingsButton) {
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
   applyHighContrast(prefs.highContrast);
@@ -390,13 +351,9 @@ async function initMenuUI(container, windowElement, floatingButton) {
   const modelInput = container.querySelector('#menu-ollama-model');
   const highContrastToggle = container.querySelector('#menu-high-contrast');
   const simplifiedToggle = container.querySelector('#menu-simplified-ui');
-  const settingsButton = container.querySelector('#menu-settings-toggle');
   const settingsPanel = container.querySelector('#menu-settings-panel');
 
-  settingsButton.innerHTML = await fetchSvgContent(SETTINGS_ICON_URL);
-  settingsButton.setAttribute('aria-label', t('popup.preferences.settings'));
-  settingsButton.title = t('popup.preferences.settings');
-
+  // Configure language and theme options
   const langOptions = [
     { value: 'en', label: t('popup.preferences.language_en') },
     { value: 'es', label: t('popup.preferences.language_es') },
@@ -458,18 +415,31 @@ async function initMenuUI(container, windowElement, floatingButton) {
     );
   });
 
+  // Settings button toggle
   settingsButton.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleSettingsPanel();
   });
 
+  // Close settings panel when clicking outside
   const handleDocumentClick = (event) => {
+    if (windowElement._dragMoved) {
+      windowElement._dragMoved = false;
+      return;
+    }
+
+    if (windowElement._isDragging) {
+      return;
+    }
+
     if (!container.contains(event.target)) {
       closeSettingsPanel();
       return;
     }
 
-    if (!settingsPanel.hidden && !event.target.closest('#menu-settings-panel') && !event.target.closest('#menu-settings-toggle')) {
+    if (!settingsPanel.hidden &&
+        !event.target.closest('#menu-settings-panel') &&
+        !event.target.closest('#menu-settings-toggle')) {
       closeSettingsPanel();
     }
   };
@@ -477,6 +447,7 @@ async function initMenuUI(container, windowElement, floatingButton) {
   document.addEventListener('click', handleDocumentClick);
   windowElement._pageAdapterSettingsDocHandler = handleDocumentClick;
 
+  // Language change
   languageSelect.addEventListener('change', async (e) => {
     const locale = e.target.value;
     const newPrefs = await loadPreferences();
@@ -503,6 +474,7 @@ async function initMenuUI(container, windowElement, floatingButton) {
     }
   });
 
+  // Theme change
   themeSelect.addEventListener('change', async (e) => {
     const theme = e.target.value;
     const newPrefs = await loadPreferences();
@@ -524,6 +496,7 @@ async function initMenuUI(container, windowElement, floatingButton) {
     }
   });
 
+  // Model input
   modelInput.addEventListener('change', async (e) => {
     const ollamaModel = e.target.value.trim() || DEFAULT_PREFERENCES.ollamaModel;
     const newPrefs = await loadPreferences();
@@ -531,6 +504,7 @@ async function initMenuUI(container, windowElement, floatingButton) {
     await savePreferences(newPrefs);
   });
 
+  // High contrast toggle
   highContrastToggle.addEventListener('change', async (e) => {
     const enabled = e.target.checked;
     const newPrefs = await loadPreferences();
@@ -552,6 +526,7 @@ async function initMenuUI(container, windowElement, floatingButton) {
     }
   });
 
+  // Simplified UI toggle
   simplifiedToggle.addEventListener('change', async (e) => {
     const enabled = e.target.checked;
     const newPrefs = await loadPreferences();
@@ -591,11 +566,7 @@ export async function createMenuWindow(floatingButton) {
     const maxWidth = Math.min(800, window.innerWidth * 0.9);
     const maxHeight = 'none';
 
-    // Load saved size and compute the actual dimensions that will be used,
-    // applying the same limits as createFloatingWindow.
     const savedSize = await loadWindowSize();
-    // console.debug('[Page Adapter] createMenuWindow: savedSize from storage', savedSize);
-
     const maxViewportWidth = window.innerWidth - 40;
     let actualWidth;
     if (savedSize && typeof savedSize.width === 'number' && savedSize.width >= 300) {
@@ -611,16 +582,13 @@ export async function createMenuWindow(floatingButton) {
     } else {
       actualHeight = Math.min(DEFAULT_HEIGHT, maxViewportHeight);
     }
-    // If no saved height, actualHeight remains null (auto height).
-
-    // console.debug('[Page Adapter] createMenuWindow: actualWidth=', actualWidth, 'actualHeight=', actualHeight);
 
     const buttonWidth = 60;
     const buttonCenterX = rect.left + rect.width / 2;
     const buttonCenterY = rect.top + rect.height / 2;
 
     // Offsets to align the close button's center with the floating button's center
-    const closeButtonSize = 32;
+    const closeButtonSize = 40; // new size
     const halfClose = closeButtonSize / 2;
     const titleBarPaddingTop = 12;
     const titleBarPaddingRight = 16;
@@ -628,7 +596,6 @@ export async function createMenuWindow(floatingButton) {
     let left = buttonCenterX - actualWidth + titleBarPaddingRight + halfClose;
     let top = buttonCenterY - titleBarPaddingTop - halfClose;
 
-    // Clamp to viewport using the same dimensions that will be applied.
     left = Math.max(
       VIEWPORT_MARGIN,
       Math.min(left, window.innerWidth - actualWidth - VIEWPORT_MARGIN)
@@ -662,42 +629,70 @@ export async function createMenuWindow(floatingButton) {
     );
 
     if (!windowElement) {
-      // console.debug('[Page Adapter] createMenuWindow: windowElement is null');
       throw new Error('createFloatingWindow returned null or undefined');
     }
 
     document.body.appendChild(windowElement);
 
-    // Re-clamp using measured dimensions in case runtime styles differ
-    // from the pre-computed size.
     clampMenuWindowPosition(windowElement);
     syncFloatingButtonWithWindow(windowElement, floatingButton);
 
-    // Hide the original close button
-    const existingCloseButton = windowElement.querySelector('.page-adapter-close');
-    if (existingCloseButton) {
-      existingCloseButton.style.display = 'none';
-    }
-
-    // Create custom close button with power icon
+    // Rebuild the title bar with our custom buttons
     const titleBar = windowElement.querySelector('.page-adapter-title-bar');
     if (!titleBar) {
       throw new Error('Title bar not found');
     }
 
-    const newCloseButton = document.createElement('button');
-    newCloseButton.className = 'page-adapter-close';
-    newCloseButton.setAttribute('aria-label', 'Close menu');
-    newCloseButton.innerHTML = POWER_SVG;
-    newCloseButton.style.width = '32px';
-    newCloseButton.style.height = '32px';
-    newCloseButton.style.fontSize = '0';
-    newCloseButton.addEventListener('click', () => {
-      // console.debug('[Page Adapter] createMenuWindow: close button clicked');
+    // Clear existing content (remove old title and close button)
+    titleBar.innerHTML = '';
+
+    // Title text
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'page-adapter-title-text';
+    titleSpan.textContent = t('popup.title');
+    titleBar.appendChild(titleSpan);
+
+    // Settings button
+    const settingsBtn = document.createElement('button');
+    settingsBtn.id = 'menu-settings-toggle';
+    settingsBtn.className = 'page-adapter-settings-toggle';
+    settingsBtn.setAttribute('aria-expanded', 'false');
+    settingsBtn.setAttribute('aria-controls', 'menu-settings-panel');
+    settingsBtn.setAttribute('aria-label', t('popup.preferences.settings'));
+    settingsBtn.title = t('popup.preferences.settings');
+    settingsBtn.type = 'button';
+
+    // Load settings icon
+    const settingsIconUrl = chrome.runtime.getURL('src/assets/icons/settings.svg');
+    try {
+      const svg = await fetchSvgContent(settingsIconUrl);
+      settingsBtn.innerHTML = svg;
+    } catch {
+      settingsBtn.textContent = '⚙';
+    }
+
+    titleBar.appendChild(settingsBtn);
+
+    // Close button (power icon)
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'page-adapter-close';
+    closeBtn.setAttribute('aria-label', 'Close menu');
+    closeBtn.type = 'button';
+
+    // Load power icon
+    const powerIconUrl = chrome.runtime.getURL('src/assets/icons/power.svg');
+    try {
+      const svg = await fetchSvgContent(powerIconUrl);
+      closeBtn.innerHTML = svg;
+    } catch {
+      closeBtn.textContent = '⏻';
+    }
+
+    closeBtn.addEventListener('click', () => {
       closeMenuWindow();
     });
 
-    titleBar.appendChild(newCloseButton);
+    titleBar.appendChild(closeBtn);
 
     // Build menu content
     const contentArea = windowElement.querySelector('.page-adapter-content-area');
@@ -708,10 +703,9 @@ export async function createMenuWindow(floatingButton) {
     const menuContainer = buildMenuContent();
     contentArea.appendChild(menuContainer);
 
-    await initMenuUI(menuContainer, windowElement, floatingButton);
+    await initMenuUI(menuContainer, windowElement, floatingButton, settingsBtn);
 
     activeWindow = windowElement;
-    // console.debug('[Page Adapter] createMenuWindow: window created and active');
   } catch (error) {
     console.error('[Page Adapter] Failed to create menu window:', error);
     if (floatingButton) {
@@ -723,17 +717,14 @@ export async function createMenuWindow(floatingButton) {
 }
 
 export function closeMenuWindow() {
-  // console.debug('[Page Adapter] closeMenuWindow called');
   if (activeWindow) {
     // Save the current size before closing
     const rect = activeWindow.getBoundingClientRect();
-    // console.debug('[Page Adapter] closeMenuWindow: saving size', { width: rect.width, height: rect.height });
     saveWindowSize(rect.width, rect.height);
 
     if (activeFloatingButton) {
       syncFloatingButtonWithWindow(activeWindow, activeFloatingButton);
       const rectBtn = activeFloatingButton.getBoundingClientRect();
-      // console.debug('[Page Adapter] closeMenuWindow: saving button position', { left: rectBtn.left, top: rectBtn.top });
       saveButtonPosition(rectBtn.left, rectBtn.top);
       activeFloatingButton.style.display = '';
       activeFloatingButton = null;
@@ -746,6 +737,5 @@ export function closeMenuWindow() {
 
     activeWindow.remove();
     activeWindow = null;
-    // console.debug('[Page Adapter] closeMenuWindow: window closed');
   }
 }
