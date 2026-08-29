@@ -40,11 +40,14 @@
         "src/content/floating-ui.js",
         "src/content/marked-loader.js",
         "src/content/floating-button.js",
+        "src/content/menu-window.js",
         "src/shared/constants.js",
         "src/shared/locale.js",
+        "src/shared/messages.js",
         "src/locales/index.js",
         "src/locales/en.js",
-        "src/locales/es.js"
+        "src/locales/es.js",
+        "src/assets/icons/*.svg"
       ],
       "matches": ["<all_urls>"]
     }

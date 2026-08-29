@@ -1,10 +1,11 @@
 /**
- * @fileoverview Creates a draggable floating circular button to open the extension popup.
- * Dependencies: chrome.runtime, chrome.storage, MESSAGE_TYPES.
+ * @fileoverview Creates a draggable floating circular button to open the extension menu window.
+ * Dependencies: chrome.runtime, chrome.storage, MESSAGE_TYPES, menu-window.
  * Used by: content.js.
  */
 
 import { MESSAGE_TYPES } from '../shared/constants.js';
+import { createMenuWindow, closeMenuWindow } from './menu-window.js';
 
 // =============================================================================
 // Constants
@@ -12,6 +13,8 @@ import { MESSAGE_TYPES } from '../shared/constants.js';
 
 const STORAGE_KEY = 'pageAdapter:buttonPosition';
 const DRAG_THRESHOLD = 5; // pixels to differentiate click from drag
+const BUTTON_VIEWPORT_MARGIN = 20;
+const LEGACY_TOP_LEFT_TOLERANCE = 2;
 
 /**
  * SVG icon for the power button (inline).
@@ -57,6 +60,35 @@ async function saveButtonPosition(left, top) {
   }
 }
 
+function getClampedButtonPosition(button, left, top) {
+  const maxX = window.innerWidth - button.offsetWidth - BUTTON_VIEWPORT_MARGIN;
+  const maxY = window.innerHeight - button.offsetHeight - BUTTON_VIEWPORT_MARGIN;
+  return {
+    left: Math.max(BUTTON_VIEWPORT_MARGIN, Math.min(left, maxX)),
+    top: Math.max(BUTTON_VIEWPORT_MARGIN, Math.min(top, maxY)),
+  };
+}
+
+function getDefaultButtonPosition(button) {
+  const top = BUTTON_VIEWPORT_MARGIN;
+  const left = window.innerWidth - button.offsetWidth - BUTTON_VIEWPORT_MARGIN;
+  return getClampedButtonPosition(button, left, top);
+}
+
+function setButtonPosition(button, left, top) {
+  button.style.left = `${left}px`;
+  button.style.top = `${top}px`;
+  button.style.right = 'auto';
+  button.style.transform = 'none';
+}
+
+function isLegacyTopLeftPosition(position) {
+  return (
+    position.left <= BUTTON_VIEWPORT_MARGIN + LEGACY_TOP_LEFT_TOLERANCE &&
+    position.top <= BUTTON_VIEWPORT_MARGIN + LEGACY_TOP_LEFT_TOLERANCE
+  );
+}
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -64,7 +96,7 @@ async function saveButtonPosition(left, top) {
 /**
  * Creates and injects the floating button into the document body.
  * The button can be dragged to a new position, and its position is persisted.
- * A click (without dragging) opens the extension popup.
+ * A click (without dragging) opens the menu window.
  *
  * @returns {void}
  */
@@ -84,13 +116,24 @@ export function createFloatingButton() {
   button.innerHTML = POWER_SVG;
   document.body.appendChild(button);
 
-  // Restore saved position if it exists.
+  const defaultPosition = getDefaultButtonPosition(button);
+  setButtonPosition(button, defaultPosition.left, defaultPosition.top);
+
+  // Restore saved position when available, otherwise use top-right by default.
   loadButtonPosition().then((pos) => {
-    if (pos) {
-      button.style.left = `${pos.left}px`;
-      button.style.top = `${pos.top}px`;
-      button.style.transform = 'none';
+    if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+      if (isLegacyTopLeftPosition(pos)) {
+        setButtonPosition(button, defaultPosition.left, defaultPosition.top);
+        saveButtonPosition(defaultPosition.left, defaultPosition.top);
+        return;
+      }
+
+      const clamped = getClampedButtonPosition(button, pos.left, pos.top);
+      setButtonPosition(button, clamped.left, clamped.top);
+      return;
     }
+
+    setButtonPosition(button, defaultPosition.left, defaultPosition.top);
   });
 
   let isDragging = false;
@@ -149,24 +192,16 @@ export function createFloatingButton() {
       let newTop = initialTop + deltaY;
 
       // Keep the button within the viewport with a margin.
-      const margin = 20;
-      const maxX = window.innerWidth - button.offsetWidth - margin;
-      const maxY = window.innerHeight - button.offsetHeight - margin;
-      newLeft = Math.max(margin, Math.min(newLeft, maxX));
-      newTop = Math.max(margin, Math.min(newTop, maxY));
-
-      button.style.left = `${newLeft}px`;
-      button.style.top = `${newTop}px`;
-      button.style.transform = 'none';
+      const clamped = getClampedButtonPosition(button, newLeft, newTop);
+      setButtonPosition(button, clamped.left, clamped.top);
     }
   }
 
   /**
    * Handles the end of a drag action.
-   * If the button was not moved, opens the popup.
-   * Otherwise, saves the new position.
+   * If the button was not moved, it's a click (handled separately).
    */
-  function onDragEnd(event) {
+  function onDragEnd() {
     if (!isDragging) {
       return;
     }
@@ -177,18 +212,39 @@ export function createFloatingButton() {
     button.style.cursor = '';
     button.style.transition = '';
 
-    if (!hasMoved) {
-      // Click without drag: open the popup.
-      chrome.runtime.sendMessage({ type: MESSAGE_TYPES.OPEN_POPUP });
-    } else {
+    if (hasMoved) {
       // Drag finished: persist the new position.
       const rect = button.getBoundingClientRect();
       saveButtonPosition(rect.left, rect.top);
     }
 
     isDragging = false;
-    hasMoved = false;
+    // Do NOT reset hasMoved here; the click listener will check it.
+  }
+
+  /**
+   * Handles click events on the button.
+   * Opens the menu window only if the button was not dragged.
+   */
+  function onClick(event) {
+    // console.debug('[Page Adapter] Botón clickeado. isDragging:', isDragging, 'hasMoved:', hasMoved);
+    // If a drag occurred, ignore the click.
+    if (isDragging || hasMoved) {
+      // console.debug('[Page Adapter] Ignorando click porque fue arrastre');
+      // Reset flags for next interaction.
+      hasMoved = false;
+      return;
+    }
+    // console.debug('[Page Adapter] Abriendo ventana desde click');
+    createMenuWindow(button);
   }
 
   button.addEventListener('mousedown', onDragStart);
+  button.addEventListener('click', onClick);
 }
+
+// =============================================================================
+// Exports for position management
+// =============================================================================
+
+export { loadButtonPosition, saveButtonPosition };
