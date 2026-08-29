@@ -74,29 +74,8 @@ function clampMenuWindowPosition(windowElement, margin = VIEWPORT_MARGIN) {
 }
 
 function syncFloatingButtonWithWindow(windowElement, floatingButton) {
-  if (!windowElement || !floatingButton) {
-    return;
-  }
-
-  const windowRect = windowElement.getBoundingClientRect();
-  const buttonRect = floatingButton.getBoundingClientRect();
-  const computedWidth = parseFloat(window.getComputedStyle(floatingButton).width);
-  const computedHeight = parseFloat(window.getComputedStyle(floatingButton).height);
-  const buttonWidth = buttonRect.width || floatingButton.offsetWidth || computedWidth || DEFAULT_BUTTON_SIZE;
-  const buttonHeight = buttonRect.height || floatingButton.offsetHeight || computedHeight || DEFAULT_BUTTON_SIZE;
-
-  const maxLeft = Math.max(BUTTON_SYNC_MARGIN, window.innerWidth - buttonWidth - BUTTON_SYNC_MARGIN);
-  const maxTop = Math.max(BUTTON_SYNC_MARGIN, window.innerHeight - buttonHeight - BUTTON_SYNC_MARGIN);
-  const nextLeft = Math.max(
-    BUTTON_SYNC_MARGIN,
-    Math.min(windowRect.left + windowRect.width - buttonWidth, maxLeft)
-  );
-  const nextTop = Math.max(BUTTON_SYNC_MARGIN, Math.min(windowRect.top, maxTop));
-
-  floatingButton.style.left = `${nextLeft}px`;
-  floatingButton.style.top = `${nextTop}px`;
-  floatingButton.style.right = 'auto';
-  floatingButton.style.transform = 'none';
+  // This function is no longer used; kept for reference but can be removed.
+  // We now position the button based on the close button directly.
 }
 
 function updateFloatingWindowTitle(windowElement) {
@@ -635,7 +614,6 @@ export async function createMenuWindow(floatingButton) {
     document.body.appendChild(windowElement);
 
     clampMenuWindowPosition(windowElement);
-    syncFloatingButtonWithWindow(windowElement, floatingButton);
 
     // Rebuild the title bar with our custom buttons
     const titleBar = windowElement.querySelector('.page-adapter-title-bar');
@@ -723,9 +701,40 @@ export function closeMenuWindow() {
     saveWindowSize(rect.width, rect.height);
 
     if (activeFloatingButton) {
-      syncFloatingButtonWithWindow(activeWindow, activeFloatingButton);
-      const rectBtn = activeFloatingButton.getBoundingClientRect();
-      saveButtonPosition(rectBtn.left, rectBtn.top);
+      // Position the floating button exactly at the center of the close button
+      const closeBtn = activeWindow.querySelector('.page-adapter-close');
+      if (closeBtn) {
+        const closeRect = closeBtn.getBoundingClientRect();
+        const btnRect = activeFloatingButton.getBoundingClientRect();
+        const w = btnRect.width || 60;
+        const h = btnRect.height || 60;
+        const left = closeRect.left + closeRect.width / 2 - w / 2;
+        const top = closeRect.top + closeRect.height / 2 - h / 2;
+
+        // Clamp to viewport margins
+        const margin = 20;
+        const maxLeft = window.innerWidth - w - margin;
+        const maxTop = window.innerHeight - h - margin;
+        const clampedLeft = Math.max(margin, Math.min(left, maxLeft));
+        const clampedTop = Math.max(margin, Math.min(top, maxTop));
+
+        activeFloatingButton.style.left = `${clampedLeft}px`;
+        activeFloatingButton.style.top = `${clampedTop}px`;
+        activeFloatingButton.style.transform = 'none';
+        saveButtonPosition(clampedLeft, clampedTop);
+      } else {
+        // Fallback: use the window's top-right corner (approximate)
+        const btnRect = activeFloatingButton.getBoundingClientRect();
+        const w = btnRect.width || 60;
+        const h = btnRect.height || 60;
+        const left = rect.left + rect.width - w - 20;
+        const top = rect.top + 20;
+        activeFloatingButton.style.left = `${left}px`;
+        activeFloatingButton.style.top = `${top}px`;
+        activeFloatingButton.style.transform = 'none';
+        saveButtonPosition(left, top);
+      }
+
       activeFloatingButton.style.display = '';
       activeFloatingButton = null;
     }
