@@ -1,7 +1,7 @@
 /**
  * @fileoverview Creates and manages the floating menu window.
  * Replaces the browser popup with a draggable, resizable panel.
- * Dependencies: floating-ui.js, locale.js, constants.js, messages.js.
+ * Dependencies: floating-ui.js, locale.js, constants.js, messages.js, preferences.js.
  * Used by: floating-button.js.
  */
 
@@ -10,13 +10,13 @@ import { t, setLocale } from '../shared/locale.js';
 import { PRESETS, MESSAGE_TYPES } from '../shared/constants.js';
 import { createUserRequest } from '../shared/messages.js';
 import { saveButtonPosition } from './floating-button.js';
+import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '../shared/preferences.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 const MAX_REQUEST_LENGTH = 2000;
-const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
 
 const DEFAULT_WIDTH = 400;
 const DEFAULT_HEIGHT = 670;
@@ -24,6 +24,7 @@ const DEFAULT_HEIGHT = 670;
 const VIEWPORT_MARGIN = 10;
 const BUTTON_SYNC_MARGIN = 20;
 const DEFAULT_BUTTON_SIZE = 60;
+const SETTINGS_ICON_URL = chrome.runtime.getURL('src/assets/icons/settings.svg');
 
 /**
  * SVG icon for the power button (used for the close button).
@@ -46,15 +47,6 @@ let activeFloatingButton = null;
 // Preferences helpers
 // =============================================================================
 
-async function loadPreferences() {
-  const result = await chrome.storage.local.get(STORAGE_PREFS_KEY);
-  return result[STORAGE_PREFS_KEY] || { theme: 'system', locale: 'en' };
-}
-
-async function savePreferences(prefs) {
-  await chrome.storage.local.set({ [STORAGE_PREFS_KEY]: prefs });
-}
-
 function applyTheme(theme) {
   document.body.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
   if (theme === 'dark') {
@@ -62,6 +54,14 @@ function applyTheme(theme) {
   } else if (theme === 'light') {
     document.body.classList.add('page-adapter-theme-light');
   }
+}
+
+function applyHighContrast(enabled) {
+  document.body.classList.toggle('page-adapter-high-contrast', enabled);
+}
+
+function applySimplifiedUi(enabled) {
+  document.body.classList.toggle('page-adapter-simplified', enabled);
 }
 
 function getDefaultStatusMessage() {
@@ -127,11 +127,64 @@ function buildMenuContent() {
 
   const header = document.createElement('header');
   header.className = 'page-adapter-menu-header';
-  header.innerHTML = `
-    <h1 id="menu-title">${t('popup.title')}</h1>
-    <p id="menu-subtitle">${t('popup.subtitle')}</p>
-  `;
+  const headerRow = document.createElement('div');
+  headerRow.className = 'page-adapter-menu-header-row';
+
+  const titleGroup = document.createElement('div');
+  titleGroup.className = 'page-adapter-menu-title-group';
+
+  const title = document.createElement('h1');
+  title.id = 'menu-title';
+  title.textContent = t('popup.title');
+  titleGroup.appendChild(title);
+
+  const subtitle = document.createElement('p');
+  subtitle.id = 'menu-subtitle';
+  subtitle.textContent = t('popup.subtitle');
+  titleGroup.appendChild(subtitle);
+
+  const settingsButton = document.createElement('button');
+  settingsButton.id = 'menu-settings-toggle';
+  settingsButton.className = 'page-adapter-settings-toggle';
+  settingsButton.type = 'button';
+  settingsButton.setAttribute('aria-expanded', 'false');
+  settingsButton.setAttribute('aria-controls', 'menu-settings-panel');
+  settingsButton.setAttribute('aria-label', t('popup.preferences.settings'));
+  settingsButton.title = t('popup.preferences.settings');
+
+  headerRow.append(titleGroup, settingsButton);
+  header.appendChild(headerRow);
   container.appendChild(header);
+
+  const settingsPanel = document.createElement('section');
+  settingsPanel.id = 'menu-settings-panel';
+  settingsPanel.className = 'page-adapter-settings-panel';
+  settingsPanel.hidden = true;
+  settingsPanel.innerHTML = `
+    <div class="page-adapter-settings-grid">
+      <div class="page-adapter-preference-row">
+        <label id="language-label" for="menu-language">${t('popup.preferences.language')}</label>
+        <select id="menu-language"></select>
+      </div>
+      <div class="page-adapter-preference-row">
+        <label id="theme-label" for="menu-theme">${t('popup.preferences.theme')}</label>
+        <select id="menu-theme"></select>
+      </div>
+      <div class="page-adapter-preference-row page-adapter-model-row">
+        <label id="model-label" for="menu-ollama-model">${t('popup.preferences.ollama_model')}</label>
+        <input id="menu-ollama-model" type="text" spellcheck="false" autocomplete="off" />
+      </div>
+      <label class="page-adapter-toggle-row" for="menu-high-contrast">
+        <span>${t('popup.preferences.high_contrast')}</span>
+        <input id="menu-high-contrast" type="checkbox" />
+      </label>
+      <label class="page-adapter-toggle-row" for="menu-simplified-ui">
+        <span>${t('popup.preferences.simplified_ui')}</span>
+        <input id="menu-simplified-ui" type="checkbox" />
+      </label>
+    </div>
+  `;
+  container.appendChild(settingsPanel);
 
   const presetsSection = document.createElement('section');
   presetsSection.className = 'page-adapter-menu-section';
@@ -184,32 +237,7 @@ function buildMenuContent() {
   status.textContent = getDefaultStatusMessage();
   container.appendChild(status);
 
-  const prefsSection = document.createElement('section');
-  prefsSection.className = 'page-adapter-menu-preferences';
-  const langRow = createPreferenceRow('language-label', 'menu-language', t('popup.preferences.language'));
-  prefsSection.appendChild(langRow);
-  const themeRow = createPreferenceRow('theme-label', 'menu-theme', t('popup.preferences.theme'));
-  prefsSection.appendChild(themeRow);
-  container.appendChild(prefsSection);
-
   return container;
-}
-
-function createPreferenceRow(labelId, selectId, labelText) {
-  const row = document.createElement('div');
-  row.className = 'page-adapter-preference-row';
-
-  const label = document.createElement('label');
-  label.id = labelId;
-  label.setAttribute('for', selectId);
-  label.textContent = labelText;
-  row.appendChild(label);
-
-  const select = document.createElement('select');
-  select.id = selectId;
-  row.appendChild(select);
-
-  return row;
 }
 
 // =============================================================================
@@ -272,6 +300,23 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function updatePopupTexts(container) {
+  container.querySelector('#menu-title').textContent = t('popup.title');
+  container.querySelector('#menu-subtitle').textContent = t('popup.subtitle');
+  container.querySelector('.page-adapter-menu-section h2').textContent = t('popup.quick_actions');
+  container.querySelector('.page-adapter-input-label').textContent = t('popup.write_need');
+  const textarea = container.querySelector('#menu-request');
+  textarea.placeholder = t('popup.placeholder');
+  container.querySelector('#menu-adapt').textContent = t('popup.adapt_button');
+  container.querySelector('#language-label').textContent = t('popup.preferences.language');
+  container.querySelector('#theme-label').textContent = t('popup.preferences.theme');
+  container.querySelector('#model-label').textContent = t('popup.preferences.ollama_model');
+  container.querySelector('#menu-settings-toggle').setAttribute('aria-label', t('popup.preferences.settings'));
+  container.querySelector('#menu-settings-toggle').title = t('popup.preferences.settings');
+  container.querySelector('#menu-high-contrast').closest('.page-adapter-toggle-row').querySelector('span').textContent = t('popup.preferences.high_contrast');
+  container.querySelector('#menu-simplified-ui').closest('.page-adapter-toggle-row').querySelector('span').textContent = t('popup.preferences.simplified_ui');
+}
+
 function updateSelectOptions(languageSelect, themeSelect) {
   const langOptions = languageSelect.querySelectorAll('option');
   langOptions.forEach((opt) => {
@@ -284,19 +329,6 @@ function updateSelectOptions(languageSelect, themeSelect) {
     const key = `popup.preferences.theme_${opt.value}`;
     opt.textContent = t(key);
   });
-}
-
-function updatePopupTexts(container) {
-  container.querySelector('#menu-title').textContent = t('popup.title');
-  container.querySelector('#menu-subtitle').textContent = t('popup.subtitle');
-  container.querySelector('.page-adapter-menu-section h2').textContent = t('popup.quick_actions');
-  container.querySelector('.page-adapter-input-label').textContent = t('popup.write_need');
-  const textarea = container.querySelector('#menu-request');
-  textarea.placeholder = t('popup.placeholder');
-  container.querySelector('#menu-adapt').textContent = t('popup.adapt_button');
-  const rows = container.querySelectorAll('.page-adapter-preference-row label');
-  rows[0].textContent = t('popup.preferences.language');
-  rows[1].textContent = t('popup.preferences.theme');
 }
 
 // =============================================================================
@@ -343,6 +375,8 @@ function setStatus(statusElement, message, type = '') {
 async function initMenuUI(container, windowElement, floatingButton) {
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
+  applyHighContrast(prefs.highContrast);
+  applySimplifiedUi(prefs.simplifiedUi);
   setLocale(prefs.locale);
   updateFloatingWindowTitle(windowElement);
 
@@ -353,6 +387,15 @@ async function initMenuUI(container, windowElement, floatingButton) {
   const statusElement = container.querySelector('#menu-status');
   const languageSelect = container.querySelector('#menu-language');
   const themeSelect = container.querySelector('#menu-theme');
+  const modelInput = container.querySelector('#menu-ollama-model');
+  const highContrastToggle = container.querySelector('#menu-high-contrast');
+  const simplifiedToggle = container.querySelector('#menu-simplified-ui');
+  const settingsButton = container.querySelector('#menu-settings-toggle');
+  const settingsPanel = container.querySelector('#menu-settings-panel');
+
+  settingsButton.innerHTML = await fetchSvgContent(SETTINGS_ICON_URL);
+  settingsButton.setAttribute('aria-label', t('popup.preferences.settings'));
+  settingsButton.title = t('popup.preferences.settings');
 
   const langOptions = [
     { value: 'en', label: t('popup.preferences.language_en') },
@@ -373,9 +416,24 @@ async function initMenuUI(container, windowElement, floatingButton) {
 
   languageSelect.value = prefs.locale;
   themeSelect.value = prefs.theme;
+  modelInput.value = prefs.ollamaModel || DEFAULT_PREFERENCES.ollamaModel;
+  highContrastToggle.checked = prefs.highContrast;
+  simplifiedToggle.checked = prefs.simplifiedUi;
 
   updatePopupTexts(container);
+  updateSelectOptions(languageSelect, themeSelect);
   await renderPresets(presetsGrid);
+
+  function closeSettingsPanel() {
+    settingsPanel.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleSettingsPanel() {
+    const nextHidden = !settingsPanel.hidden;
+    settingsPanel.hidden = nextHidden;
+    settingsButton.setAttribute('aria-expanded', String(!nextHidden));
+  }
 
   function updateCounter() {
     const length = textarea.value.length;
@@ -399,6 +457,25 @@ async function initMenuUI(container, windowElement, floatingButton) {
       statusElement
     );
   });
+
+  settingsButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleSettingsPanel();
+  });
+
+  const handleDocumentClick = (event) => {
+    if (!container.contains(event.target)) {
+      closeSettingsPanel();
+      return;
+    }
+
+    if (!settingsPanel.hidden && !event.target.closest('#menu-settings-panel') && !event.target.closest('#menu-settings-toggle')) {
+      closeSettingsPanel();
+    }
+  };
+
+  document.addEventListener('click', handleDocumentClick);
+  windowElement._pageAdapterSettingsDocHandler = handleDocumentClick;
 
   languageSelect.addEventListener('change', async (e) => {
     const locale = e.target.value;
@@ -440,6 +517,55 @@ async function initMenuUI(container, windowElement, floatingButton) {
         await chrome.tabs.sendMessage(tab.id, {
           type: MESSAGE_TYPES.SET_THEME,
           payload: { theme },
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  });
+
+  modelInput.addEventListener('change', async (e) => {
+    const ollamaModel = e.target.value.trim() || DEFAULT_PREFERENCES.ollamaModel;
+    const newPrefs = await loadPreferences();
+    newPrefs.ollamaModel = ollamaModel;
+    await savePreferences(newPrefs);
+  });
+
+  highContrastToggle.addEventListener('change', async (e) => {
+    const enabled = e.target.checked;
+    const newPrefs = await loadPreferences();
+    newPrefs.highContrast = enabled;
+    await savePreferences(newPrefs);
+    applyHighContrast(enabled);
+
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tab = tabs[0];
+      if (tab?.id) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: MESSAGE_TYPES.SET_HIGH_CONTRAST,
+          payload: { enabled },
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  });
+
+  simplifiedToggle.addEventListener('change', async (e) => {
+    const enabled = e.target.checked;
+    const newPrefs = await loadPreferences();
+    newPrefs.simplifiedUi = enabled;
+    await savePreferences(newPrefs);
+    applySimplifiedUi(enabled);
+
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tab = tabs[0];
+      if (tab?.id) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: MESSAGE_TYPES.SET_SIMPLIFIED_UI,
+          payload: { enabled },
         });
       }
     } catch {
@@ -612,6 +738,12 @@ export function closeMenuWindow() {
       activeFloatingButton.style.display = '';
       activeFloatingButton = null;
     }
+
+    if (activeWindow._pageAdapterSettingsDocHandler) {
+      document.removeEventListener('click', activeWindow._pageAdapterSettingsDocHandler);
+      activeWindow._pageAdapterSettingsDocHandler = null;
+    }
+
     activeWindow.remove();
     activeWindow = null;
     // console.debug('[Page Adapter] closeMenuWindow: window closed');

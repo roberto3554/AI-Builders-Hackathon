@@ -108,6 +108,16 @@ body.high-contrast {
   --shadow-popup: none;
 }
 
+body.simplified-ui .header p,
+body.simplified-ui .section h2,
+body.simplified-ui #counter {
+  display: none;
+}
+
+body.simplified-ui .input-footer {
+  justify-content: flex-end;
+}
+
 /* ============================================================================
    Reset & base
    ============================================================================ */

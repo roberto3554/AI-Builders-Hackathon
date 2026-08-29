@@ -1,16 +1,17 @@
 /**
  * @fileoverview Ollama API communication and AI helpers.
- * Dependencies: shared/locale.js.
+ * Dependencies: shared/locale.js, shared/preferences.js.
  * Used by: message-handler.js.
  */
 
 import { t } from '../shared/locale.js';
+import { DEFAULT_PREFERENCES, loadPreferences } from '../shared/preferences.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const OLLAMA_DEFAULT_MODEL = 'qwen3.5:2b';
+const OLLAMA_DEFAULT_MODEL = DEFAULT_PREFERENCES.ollamaModel;
 const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
 const OLLAMA_TEMPERATURE = 0.7;
 const OLLAMA_TOP_P = 0.9;
@@ -83,6 +84,11 @@ export async function callOllama(
   return result.response;
 }
 
+async function getPreferredModel() {
+  const preferences = await loadPreferences();
+  return preferences.ollamaModel || OLLAMA_DEFAULT_MODEL;
+}
+
 // =============================================================================
 // AI Helpers (Summarize & Chat)
 // =============================================================================
@@ -102,7 +108,7 @@ export async function handleSummarize({ text, title }) {
     'You are a helpful assistant that summarizes web content clearly and concisely.';
 
   try {
-    const summary = await callOllama(prompt, systemPrompt);
+    const summary = await callOllama(prompt, systemPrompt, await getPreferredModel());
     return { ok: true, summary };
   } catch (error) {
     throw new Error(t('error.ollama_generic', { message: error.message }));
@@ -124,7 +130,7 @@ export async function handleChatQuestion({ question, context }) {
     'You are a helpful assistant that answers questions about webpage content.';
 
   try {
-    const answer = await callOllama(prompt, systemPrompt);
+    const answer = await callOllama(prompt, systemPrompt, await getPreferredModel());
     return { ok: true, answer };
   } catch (error) {
     throw new Error(t('error.chat_generic', { message: error.message }));

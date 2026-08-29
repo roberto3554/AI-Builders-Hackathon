@@ -239,7 +239,7 @@ export function createFloatingWindow(
   let initialLeftPos = 0, initialTopPos = 0;
 
   function onDragStart(event) {
-    if (event.target.closest('.page-adapter-close')) return;
+    if (event.target.closest('button')) return;
     if (!event.target.closest('.page-adapter-title-bar')) return;
 
     isDragging = true;

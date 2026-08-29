@@ -8,6 +8,7 @@
 import { PRESETS, MESSAGE_TYPES } from '../shared/constants.js';
 import { createUserRequest } from '../shared/messages.js';
 import { t, setLocale } from '../shared/locale.js';
+import { loadPreferences, savePreferences } from '../shared/preferences.js';
 
 // =============================================================================
 // Constants
@@ -15,8 +16,6 @@ import { t, setLocale } from '../shared/locale.js';
 
 const MAX_REQUEST_LENGTH = 2000;
 const STATUS_DISPLAY_MS = 350;
-const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
-
 // =============================================================================
 // DOM references
 // =============================================================================
@@ -68,6 +67,14 @@ function applyTheme(theme) {
     document.body.classList.add('theme-light');
   }
   // 'system' → no class, media query prevails
+}
+
+function applyHighContrast(enabled) {
+  document.body.classList.toggle('high-contrast', enabled);
+}
+
+function applySimplifiedUi(enabled) {
+  document.body.classList.toggle('simplified-ui', enabled);
 }
 
 /**
@@ -229,28 +236,6 @@ async function submitNaturalLanguage() {
   await sendRequest(
     createUserRequest({
       mode: 'natural_language',
-      request,
-    })
-  );
-}
-
-// =============================================================================
-// Request sending
-// =============================================================================
-
-/**
- * Sends a user request to the background script and handles the response.
- *
- * @param {object} message - The request message to send.
- * @returns {Promise<void>}
- */
-async function sendRequest(message) {
-  setLoading(true);
-  setStatus(t('popup.status.sending'));
-
-  try {
-    const response = await chrome.runtime.sendMessage(message);
-
     if (!response?.ok) {
       throw new Error(response?.error || t('popup.error.generic'));
     }
@@ -328,6 +313,8 @@ function escapeHtml(value) {
   // Load and apply preferences
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
+  applyHighContrast(prefs.highContrast);
+  applySimplifiedUi(prefs.simplifiedUi);
   applyLocale(prefs.locale);
   languageSelect.value = prefs.locale;
   themeSelect.value = prefs.theme;

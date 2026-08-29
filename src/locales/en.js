@@ -25,6 +25,10 @@ export default {
   // ===========================================================================
   'popup.preferences.language': 'Language',
   'popup.preferences.theme': 'Theme',
+  'popup.preferences.settings': 'Settings',
+  'popup.preferences.ollama_model': 'Ollama model',
+  'popup.preferences.high_contrast': 'High contrast',
+  'popup.preferences.simplified_ui': 'Simplified interface',
   'popup.preferences.theme_system': 'System',
   'popup.preferences.theme_light': 'Light',
   'popup.preferences.theme_dark': 'Dark',

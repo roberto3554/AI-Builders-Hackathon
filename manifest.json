@@ -42,6 +42,7 @@
         "src/content/floating-button.js",
         "src/content/menu-window.js",
         "src/shared/constants.js",
+        "src/shared/preferences.js",
         "src/shared/locale.js",
         "src/shared/messages.js",
         "src/locales/index.js",

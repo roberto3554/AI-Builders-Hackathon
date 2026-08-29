@@ -19,8 +19,6 @@ if (!document.documentElement.dataset.pageAdapterInjected) {
 // Theme & locale handling
 // =============================================================================
 
-const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
-
 /**
  * Loads the locale module dynamically.
  *
@@ -29,6 +27,15 @@ const STORAGE_PREFS_KEY = 'pageAdapter:preferences';
 async function loadLocaleModule() {
   // `import()` works because the module is declared as web_accessible_resource.
   return import('../shared/locale.js');
+}
+
+/**
+ * Loads the shared preferences module dynamically.
+ *
+ * @returns {Promise<object>} The preferences module containing storage helpers.
+ */
+async function loadPreferencesModule() {
+  return import('../shared/preferences.js');
 }
 
 /**
@@ -46,14 +53,12 @@ function applyTheme(theme) {
   // 'system' → no class, media query prevails
 }
 
-/**
- * Loads user preferences from storage.
- *
- * @returns {Promise<object>} An object with `theme` and `locale` properties.
- */
-async function loadPreferences() {
-  const result = await chrome.storage.local.get(STORAGE_PREFS_KEY);
-  return result[STORAGE_PREFS_KEY] || { theme: 'system', locale: 'en' };
+function applyHighContrast(enabled) {
+  document.body.classList.toggle('page-adapter-high-contrast', enabled);
+}
+
+function applySimplifiedUi(enabled) {
+  document.body.classList.toggle('page-adapter-simplified', enabled);
 }
 
 // =============================================================================
@@ -89,6 +94,18 @@ async function onRuntimeMessage(message, sender, sendResponse) {
 
       case 'SET_THEME': {
         applyTheme(message.payload.theme);
+        sendResponse({ ok: true });
+        return true;
+      }
+
+      case 'SET_HIGH_CONTRAST': {
+        applyHighContrast(Boolean(message.payload.enabled));
+        sendResponse({ ok: true });
+        return true;
+      }
+
+      case 'SET_SIMPLIFIED_UI': {
+        applySimplifiedUi(Boolean(message.payload.enabled));
         sendResponse({ ok: true });
         return true;
       }
@@ -137,8 +154,11 @@ chrome.runtime.onMessage.addListener(onRuntimeMessage);
 // =============================================================================
 
 (async function initContent() {
+  const { loadPreferences } = await loadPreferencesModule();
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
+  applyHighContrast(prefs.highContrast);
+  applySimplifiedUi(prefs.simplifiedUi);
 
   // Load locale module and set the locale.
   const { setLocale } = await loadLocaleModule();
