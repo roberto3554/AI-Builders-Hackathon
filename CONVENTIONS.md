@@ -64,7 +64,7 @@ page-adapter/
 ├── manifest.json
 ├── CONVENTIONS.md
 └── ...
-`````
+````
 
 ### 2.1 Directory Responsibilities
 
