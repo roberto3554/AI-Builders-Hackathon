@@ -669,7 +669,7 @@ export async function createMenuWindow(floatingButton) {
     closeBtn.type = 'button';
 
     // Load power icon
-    const powerIconUrl = chrome.runtime.getURL('src/assets/icons/power.svg');
+    const powerIconUrl = chrome.runtime.getURL('src/assets/icons/accessibility.svg');
     try {
       const svg = await fetchSvgContent(powerIconUrl);
       closeBtn.innerHTML = svg;

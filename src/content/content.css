@@ -35,6 +35,7 @@
   --pa-spacing-lg: 16px;
   --pa-spacing-xl: 20px;
   --pa-spacing-2xl: 24px;
+  --font-size-base: 1rem;
 }
 
 /* ============================================================================
@@ -56,6 +57,7 @@
     --pa-primary: #3b82f6;
     --pa-primary-hover: #2563eb;
     --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
+    --font-size-base: 1rem;
   }
 }
 
@@ -602,6 +604,10 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   flex: 0 0 auto;
 }
 
+.page-adapter-menu-subtitle {
+  color: var(--pa-text-secondary);
+}
+
 .page-adapter-settings-toggle:hover {
   background: var(--pa-border-color);
   color: var(--pa-text-primary);
@@ -634,7 +640,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 }
 
 .page-adapter-menu-header h1 {
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1.2;
   margin: 0 0 var(--pa-spacing-sm);
   color: var(--pa-text-primary);
@@ -642,7 +648,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 
 .page-adapter-menu-header p {
   color: var(--pa-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   margin: 0;
 }
 
@@ -672,6 +678,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   text-align: left;
   transition: background 0.15s ease, border-color 0.15s ease;
   font-size: var(--pa-font-size-base);
+  font-size: var(--font-size-base);
   width: 100%;
 }
 

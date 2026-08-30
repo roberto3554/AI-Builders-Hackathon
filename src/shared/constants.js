@@ -47,7 +47,7 @@ export const MESSAGE_TYPES = Object.freeze({
 export const PRESETS = Object.freeze([
   {
     id: 'high_contrast',
-    icon: 'src/assets/icons/simplify.svg',
+    icon: 'src/assets/icons/contrast.svg',
     label: 'High contrast',
     request: 'Apply a strong high-contrast adaptation to the entire page so text, controls, and structure are much easier to distinguish.',
   },
