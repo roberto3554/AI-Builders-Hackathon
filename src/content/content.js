@@ -82,8 +82,12 @@ async function onRuntimeMessage(message, sender, sendResponse) {
   try {
     switch (message.type) {
       case 'GET_PAGE_CONTEXT': {
-        const { extractPageContext } = await import('./page-context.js');
-        sendResponse({ ok: true, context: extractPageContext() });
+        const { extractPageContext, extractDomSnapshot } = await import('./page-context.js');
+        sendResponse({
+          ok: true,
+          context: extractPageContext(),
+          snapshot: extractDomSnapshot(),
+        });
         return true;
       }
 
@@ -114,6 +118,13 @@ async function onRuntimeMessage(message, sender, sendResponse) {
         const { setLocale } = await loadLocaleModule();
         setLocale(message.payload.locale);
         sendResponse({ ok: true });
+        return true;
+      }
+
+      case 'APPLY_DOM_TOOL': {
+        const { applyDomTool } = await import('./dom-tools.js');
+        const result = await applyDomTool(message.payload);
+        sendResponse(result);
         return true;
       }
 

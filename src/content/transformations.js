@@ -5,8 +5,7 @@
  */
 
 import { t } from '../shared/locale.js';
-import { showOverlay, showNotification } from './floating-ui.js';
-import { extractMainText } from './page-context.js';
+import { showNotification } from './floating-ui.js';
 
 /**
  * Applies a transformation to the page based on the payload.
@@ -26,6 +25,10 @@ export function applyTransformation(payload) {
   }
 
   switch (presetId) {
+    case 'high_contrast':
+      applyHighContrastMode();
+      break;
+
     case 'simplify':
       applySimplify();
       break;
@@ -34,19 +37,15 @@ export function applyTransformation(payload) {
       applyTranslate();
       break;
 
-    case 'explain':
-      applyExplain();
-      break;
-
     default: {
       // Heuristic based on request text.
       const lower = request.toLowerCase();
-      if (lower.includes('simplif') || lower.includes('simple')) {
+      if (lower.includes('contrast') || lower.includes('high contrast') || lower.includes('dalt')) {
+        applyHighContrastMode();
+      } else if (lower.includes('simplif') || lower.includes('simple')) {
         applySimplify();
       } else if (lower.includes('traduc') || lower.includes('translate')) {
         applyTranslate();
-      } else if (lower.includes('explic') || lower.includes('explain')) {
-        applyExplain();
       } else {
         showNotification(`Request received: ${request}`);
       }
@@ -63,6 +62,7 @@ export function clearTransformations() {
   });
 
   document.body.classList.remove(
+    'page-adapter-high-contrast',
     'page-adapter-simplify',
     'page-adapter-translate'
   );
@@ -103,19 +103,18 @@ export function applySimplify() {
 }
 
 /**
+ * Applies a high-contrast adaptation to the page.
+ */
+export function applyHighContrastMode() {
+  document.body.classList.add('page-adapter-high-contrast');
+  showNotification(t('notification.high_contrast'));
+}
+
+/**
  * Applies the "translate" transformation (simulated language change).
  */
 export function applyTranslate() {
   document.documentElement.lang = 'es';
   document.body.classList.add('page-adapter-translate');
   showNotification(t('notification.translated'));
-}
-
-/**
- * Applies the "explain" transformation: shows a simplified explanation.
- */
-export function applyExplain() {
-  const text = extractMainText();
-  const explanation = t('notification.explanation', { text: text.slice(0, 300) });
-  showOverlay('Explanation', explanation);
 }

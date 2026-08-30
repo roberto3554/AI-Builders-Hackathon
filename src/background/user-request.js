@@ -12,8 +12,61 @@ import {
   ensureContentScriptInjected,
   sendToContentScript,
 } from './injection.js';
+import { handleDomAdaptation } from './ollama.js';
 
 const STORAGE_KEY = 'pageAdapter:lastRequest';
+
+// =============================================================================
+// Helper: perform DOM adaptation via LLM
+// =============================================================================
+
+/**
+ * Executes the DOM adaptation loop using Ollama.
+ *
+ * @param {number} tabId - The target tab ID.
+ * @param {string} requestText - The user request text.
+ * @param {object} pageContextResult - Result from GET_PAGE_CONTEXT.
+ * @returns {Promise<object>} Result of the adaptation process.
+ */
+async function performDomAdaptation(tabId, requestText, pageContextResult) {
+  let adaptationPlan = null;
+  let lastIteration = 0;
+
+  for (let iteration = 1; iteration <= 3; iteration++) {
+    lastIteration = iteration;
+
+    adaptationPlan = await handleDomAdaptation({
+      request: requestText,
+      pageContext: {
+        context: pageContextResult.context,
+        snapshot: pageContextResult.snapshot,
+      },
+      iteration,
+    });
+
+    for (const action of adaptationPlan.actions) {
+      const toolResult = await sendToContentScript(tabId, {
+        type: MESSAGE_TYPES.APPLY_DOM_TOOL,
+        payload: action,
+      });
+
+      if (!toolResult?.ok) {
+        throw new Error(toolResult?.error || t('error.send_to_tab'));
+      }
+    }
+
+    if (adaptationPlan.complete || adaptationPlan.actions.length === 0) {
+      break;
+    }
+  }
+
+  return {
+    ok: true,
+    plan: adaptationPlan,
+    iterations: lastIteration,
+  };
+}
+
 
 // =============================================================================
 // Public API
@@ -62,7 +115,30 @@ export async function handleUserRequest(message, providedTab = null) {
 
   await chrome.storage.local.set({ [STORAGE_KEY]: request });
 
-  // Delegate to content script based on preset type.
+  // --- Natural language or high-contrast preset → DOM adaptation via LLM ---
+  if (
+    message.payload.mode === 'natural_language' ||
+    (message.payload.mode === 'preset' && message.payload.presetId === 'high_contrast')
+  ) {
+    const pageContextResult = await sendToContentScript(tab.id, {
+      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
+    });
+
+    if (!pageContextResult?.ok) {
+      throw new Error(pageContextResult?.error || t('error.send_to_tab'));
+    }
+
+    const requestText = message.payload.request; // For natural_language or preset request
+    const result = await performDomAdaptation(tab.id, requestText, pageContextResult);
+
+    return {
+      ok: true,
+      request,
+      ...result,
+    };
+  }
+
+  // --- Preset: summarize ---
   if (message.payload.presetId === 'summarize') {
     await sendToContentScript(tab.id, {
       type: 'START_SUMMARIZE',
@@ -70,6 +146,7 @@ export async function handleUserRequest(message, providedTab = null) {
     return { ok: true };
   }
 
+  // --- Other presets (simplify, translate) → simple transformations ---
   await sendToContentScript(tab.id, {
     type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
     payload: {

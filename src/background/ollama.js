@@ -15,6 +15,18 @@ const OLLAMA_DEFAULT_MODEL = DEFAULT_PREFERENCES.ollamaModel;
 const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
 const OLLAMA_TEMPERATURE = 0.7;
 const OLLAMA_TOP_P = 0.9;
+const MAX_DOM_ADAPTATION_STEPS = 3;
+const ALLOWED_DOM_ACTIONS = new Set([
+  'read_node',
+  'set_text',
+  'set_style',
+  'set_attribute',
+  'add_class',
+  'remove_class',
+  'hide_node',
+  'show_node',
+  'remove_node',
+]);
 
 // =============================================================================
 // Ollama API communication
@@ -87,6 +99,136 @@ export async function callOllama(
 async function getPreferredModel() {
   const preferences = await loadPreferences();
   return preferences.ollamaModel || OLLAMA_DEFAULT_MODEL;
+}
+
+/**
+ * Extracts a JSON object from a model response.
+ *
+ * @param {string} responseText - The raw model response.
+ * @returns {object} Parsed JSON payload.
+ */
+function parseJsonResponse(responseText) {
+  const trimmedText = responseText.trim();
+
+  try {
+    return JSON.parse(trimmedText);
+  } catch {
+    const fencedMatch = trimmedText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fencedMatch?.[1]) {
+      return JSON.parse(fencedMatch[1].trim());
+    }
+
+    const firstBrace = trimmedText.indexOf('{');
+    const lastBrace = trimmedText.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(trimmedText.slice(firstBrace, lastBrace + 1));
+    }
+
+    throw new Error('The model did not return valid JSON.');
+  }
+}
+
+function buildDomAdaptationPrompt({ request, pageContext, iteration }) {
+  const snapshotText = JSON.stringify(pageContext.snapshot).slice(0, 40000);
+  const contextText = JSON.stringify(
+    {
+      title: pageContext.context.title,
+      url: pageContext.context.url,
+      language: pageContext.context.language,
+      headings: pageContext.context.headings,
+      text: pageContext.context.text,
+    },
+    null,
+    2
+  );
+
+  return [
+    `User request: ${request}`,
+    `Iteration: ${iteration}`,
+    '',
+    'Page context:',
+    contextText,
+    '',
+    'DOM snapshot:',
+    snapshotText,
+    '',
+    'Allowed tool actions:',
+    '- read_node',
+    '- set_text',
+    '- set_style',
+    '- set_attribute',
+    '- add_class',
+    '- remove_class',
+    '- hide_node',
+    '- show_node',
+    '- remove_node',
+    '',
+    'Return only valid JSON with this shape:',
+    '{',
+    '  "complete": boolean,',
+    '  "summary": string,',
+    '  "actions": [',
+    '    { "action": string, "nodeId": string, "text"?: string, "style"?: object, "attributes"?: object, "depth"?: number }',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- Prefer minimal, reversible changes.',
+    '- Use node ids that already exist in the snapshot.',
+    '- Prefer layout, contrast, typography, visibility, and text changes.',
+    '- Do not invent tools or output markdown.',
+    '- Do not include code fences or commentary outside JSON.',
+  ].join('\n');
+}
+
+function normalizeDomActions(actions) {
+  if (!Array.isArray(actions)) {
+    return [];
+  }
+
+  return actions
+    .filter((action) => action && typeof action === 'object')
+    .map((action) => ({
+      ...action,
+      action: typeof action.action === 'string' ? action.action : '',
+      nodeId: typeof action.nodeId === 'string' ? action.nodeId : '',
+    }))
+    .filter((action) => ALLOWED_DOM_ACTIONS.has(action.action) && action.nodeId);
+}
+
+/**
+ * Requests a bounded DOM adaptation plan from Ollama.
+ *
+ * @param {object} payload - The request payload.
+ * @param {string} payload.request - The user request.
+ * @param {object} payload.pageContext - The page context and snapshot.
+ * @param {number} [payload.iteration=1] - The planning iteration.
+ * @returns {Promise<object>} The parsed adaptation plan.
+ */
+export async function handleDomAdaptation({ request, pageContext, iteration = 1 }) {
+  const prompt = buildDomAdaptationPrompt({ request, pageContext, iteration });
+  const systemPrompt = [
+    'You are a DOM adaptation planner for a browser extension.',
+    'You must reason from the provided page context and snapshot.',
+    'Return only JSON that matches the requested shape.',
+    'Keep changes safe, incremental, and focused on accessibility or readability.',
+    'Prefer high contrast, reduced clutter, clearer hierarchy, larger text, and stronger affordances when appropriate.',
+    'Use the existing node ids from the snapshot only.',
+  ].join(' ');
+
+  try {
+    const responseText = await callOllama(prompt, systemPrompt, await getPreferredModel());
+    const plan = parseJsonResponse(responseText);
+
+    return {
+      ok: true,
+      complete: Boolean(plan.complete),
+      summary: typeof plan.summary === 'string' ? plan.summary : '',
+      actions: normalizeDomActions(plan.actions),
+    };
+  } catch (error) {
+    throw new Error(t('error.dom_adaptation_generic', { message: error.message }));
+  }
 }
 
 // =============================================================================

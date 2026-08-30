@@ -195,8 +195,9 @@ async function fetchSvgContent(url) {
   return response.text();
 }
 
-async function renderPresets(container) {
+async function renderPresets(container, statusElement) {
   container.innerHTML = '';
+  const menuContainer = statusElement?.closest('.page-adapter-menu-container') || container.closest('.page-adapter-menu-container');
 
   for (const preset of PRESETS) {
     const iconUrl = chrome.runtime.getURL(preset.icon || '');
@@ -226,7 +227,9 @@ async function renderPresets(container) {
           mode: 'preset',
           request: preset.request,
           presetId: preset.id,
-        })
+        }),
+        statusElement,
+        menuContainer
       );
     });
 
@@ -275,8 +278,8 @@ function updateSelectOptions(languageSelect, themeSelect) {
 // Request sending
 // =============================================================================
 
-async function sendRequest(message, statusElement) {
-  setLoading(true);
+async function sendRequest(message, statusElement, container) {
+  setLoading(true, container || statusElement?.closest('.page-adapter-menu-container'));
   setStatus(statusElement, t('popup.status.sending'));
 
   try {
@@ -289,13 +292,19 @@ async function sendRequest(message, statusElement) {
     setStatus(statusElement, t('popup.status.success'), 'success');
   } catch (error) {
     setStatus(statusElement, error.message || t('popup.error.generic'), 'error');
-    setLoading(false);
+    setLoading(false, container || statusElement?.closest('.page-adapter-menu-container'));
   }
 }
 
 function setLoading(value, container) {
+  if (!container) {
+    return;
+  }
+
   const adaptButton = container.querySelector('#menu-adapt');
-  adaptButton.disabled = value;
+  if (adaptButton) {
+    adaptButton.disabled = value;
+  }
 
   const presetButtons = container.querySelectorAll('.page-adapter-preset-button');
   presetButtons.forEach((btn) => {
@@ -359,7 +368,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
 
   updatePopupTexts(container);
   updateSelectOptions(languageSelect, themeSelect);
-  await renderPresets(presetsGrid);
+  await renderPresets(presetsGrid, statusElement);
 
   function closeSettingsPanel() {
     settingsPanel.hidden = true;
@@ -391,7 +400,8 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
         mode: 'natural_language',
         request,
       }),
-      statusElement
+      statusElement,
+      container
     );
   });
 
@@ -437,7 +447,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     updatePopupTexts(container);
     updateFloatingWindowTitle(windowElement);
     updateSelectOptions(languageSelect, themeSelect);
-    await renderPresets(presetsGrid);
+    await renderPresets(presetsGrid, statusElement);
     setStatus(statusElement, getDefaultStatusMessage());
 
     try {

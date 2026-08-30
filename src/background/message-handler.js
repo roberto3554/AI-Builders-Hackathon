@@ -33,7 +33,7 @@ export function onRuntimeMessage(message, sender, sendResponse) {
   try {
     switch (message.type) {
       case MESSAGE_TYPES.USER_REQUEST:
-        handleUserRequest(message)
+        handleUserRequest(message, sender?.tab)
           .then(sendResponse)
           .catch((error) => {
             console.error('[Page Adapter] Error handling user request:', error);

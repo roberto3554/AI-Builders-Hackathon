@@ -35,6 +35,7 @@
         "src/lib/marked.umd.js",
         "src/lib/marked.esm.js",
         "src/content/page-context.js",
+        "src/content/dom-tools.js",
         "src/content/transformations.js",
         "src/content/summarizer.js",
         "src/content/floating-ui.js",
