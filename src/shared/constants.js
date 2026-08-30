@@ -14,6 +14,7 @@
  */
 export const MESSAGE_TYPES = Object.freeze({
   APPLY_TRANSFORMATION: 'APPLY_TRANSFORMATION',
+  APPLY_DOM_TOOL: 'APPLY_DOM_TOOL',
   CHAT_QUESTION: 'CHAT_QUESTION',
   CHAT_RESPONSE: 'CHAT_RESPONSE',
   GET_PAGE_CONTEXT: 'GET_PAGE_CONTEXT',
@@ -45,10 +46,10 @@ export const MESSAGE_TYPES = Object.freeze({
  */
 export const PRESETS = Object.freeze([
   {
-    id: 'explain',
-    icon: 'src/assets/icons/explain.svg',
-    label: 'Explain',
-    request: 'Explain the main content of this page in simple terms.',
+    id: 'high_contrast',
+    icon: 'src/assets/icons/contrast.svg',
+    label: 'High contrast',
+    request: 'Apply a strong high-contrast adaptation to the entire page so text, controls, and structure are much easier to distinguish.',
   },
   {
     id: 'simplify',

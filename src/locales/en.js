@@ -39,9 +39,9 @@ export default {
   // ===========================================================================
   // Popup – Presets
   // ===========================================================================
+  'preset.high_contrast': 'High contrast',
   'preset.simplify': 'Simplify',
   'preset.summarize': 'Summarize',
-  'preset.explain': 'Explain',
   'preset.translate': 'Translate',
 
   // ===========================================================================
@@ -67,9 +67,9 @@ export default {
   // ===========================================================================
   // Content – Notifications & Overlays
   // ===========================================================================
+  'notification.high_contrast': 'High contrast mode activated',
   'notification.simplified': 'Simplified mode activated',
   'notification.translated': 'Language changed to Spanish (simulated)',
-  'notification.explanation': 'Explanation: {{text}}… (simplified)',
 
   // ===========================================================================
   // Background – Errors
@@ -79,6 +79,7 @@ export default {
   'error.injection_failed': 'Failed to establish communication with the content script. Try reloading the page and try again.',
   'error.ollama_connection': 'Unable to connect to the Ollama service. Please ensure it is running at {{url}}.',
   'error.ollama_generic': 'Failed to generate summary: {{message}}',
+  'error.dom_adaptation_generic': 'Failed to adapt the page: {{message}}',
   'error.chat_generic': 'Failed to answer question: {{message}}',
   'error.send_to_tab': 'Unable to interact with this page. Try a normal webpage and reload after installing the extension.',
 };

@@ -104,7 +104,7 @@ export function createFloatingButton() {
   button.type = 'button';
 
   // Load the power SVG icon.
-  const powerIconUrl = chrome.runtime.getURL('src/assets/icons/power.svg');
+  const powerIconUrl = chrome.runtime.getURL('src/assets/icons/accessibility.svg');
   fetch(powerIconUrl)
     .then(response => {
       if (!response.ok) throw new Error('Failed to load power icon');

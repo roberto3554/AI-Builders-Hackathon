@@ -39,9 +39,9 @@ export default {
   // ===========================================================================
   // Popup – Presets
   // ===========================================================================
+  'preset.high_contrast': 'Alto contraste',
   'preset.simplify': 'Simplificar',
   'preset.summarize': 'Resumir',
-  'preset.explain': 'Explicar',
   'preset.translate': 'Traducir',
 
   // ===========================================================================
@@ -67,9 +67,9 @@ export default {
   // ===========================================================================
   // Content – Notifications & Overlays
   // ===========================================================================
+  'notification.high_contrast': 'Modo de alto contraste activado',
   'notification.simplified': 'Modo simplificado activado',
   'notification.translated': 'Idioma cambiado a español (simulado)',
-  'notification.explanation': 'Explicación: {{text}}… (simplificada)',
 
   // ===========================================================================
   // Background – Errors
@@ -79,6 +79,7 @@ export default {
   'error.injection_failed': 'No se pudo establecer comunicación con el script de contenido. Intenta recargar la página.',
   'error.ollama_connection': 'No se pudo conectar con el servicio Ollama. Asegúrate de que esté ejecutándose en {{url}}.',
   'error.ollama_generic': 'Error al generar el resumen: {{message}}',
+  'error.dom_adaptation_generic': 'Error al adaptar la página: {{message}}',
   'error.chat_generic': 'Error al responder la pregunta: {{message}}',
   'error.send_to_tab': 'No se puede interactuar con esta página. Prueba con una página web normal y recarga después de instalar la extensión.',
 };
