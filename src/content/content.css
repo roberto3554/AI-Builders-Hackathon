@@ -606,6 +606,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 
 .page-adapter-menu-subtitle {
   color: var(--pa-text-secondary);
+  font-size: 16px;
 }
 
 .page-adapter-settings-toggle:hover {
@@ -654,7 +655,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 
 .page-adapter-menu-section h2 {
   color: var(--pa-text-secondary);
-  font-size: 13px;
+  font-size: 16px;
   margin: 0 0 var(--pa-spacing-md);
 }
 
@@ -715,7 +716,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 .page-adapter-input-label {
   color: var(--pa-text-secondary);
   display: block;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   margin-bottom: var(--pa-spacing-sm);
 }
@@ -725,7 +726,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   border: 1px solid var(--pa-border-input);
   border-radius: var(--pa-radius-md);
   color: var(--pa-text-primary);
-  font-size: 13px;
+  font-size: 16px;
   outline: none;
   padding: var(--pa-spacing-sm) var(--pa-spacing-md);
   width: 100%;
@@ -757,7 +758,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   border-radius: var(--pa-radius-md);
   color: var(--pa-text-primary);
   display: block;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.5;
   min-height: 120px;
   outline: none;
@@ -819,7 +820,7 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 
 .page-adapter-status {
   color: var(--pa-text-secondary);
-  font-size: 12px;
+  font-size: 14px;
   min-height: 20px;
 }
 
