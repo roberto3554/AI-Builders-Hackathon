@@ -499,7 +499,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
 /* ============================================================================
    Floating button (power)
    ============================================================================ */
-#page-adapter-floating-button {
+#extension-floating-button {
   position: fixed;
   top: 20px;
   right: 20px;
@@ -521,26 +521,26 @@ body.page-adapter-simplified .page-adapter-input-footer {
   user-select: none; /* Prevent text selection during drag */
 }
 
-#page-adapter-floating-button:hover {
+#extension-floating-button:hover {
   cursor: grab;
 }
 
-#page-adapter-floating-button:active {
+#extension-floating-button:active {
   cursor: grabbing;
 }
 
-#page-adapter-floating-button:hover {
+#extension-floating-button:hover {
   background: var(--pa-bg-subtle);
   transform: scale(1.05);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
 }
 
-#page-adapter-floating-button:focus-visible {
+#extension-floating-button:focus-visible {
   outline: 3px solid var(--pa-border-focus);
   outline-offset: 2px;
 }
 
-#page-adapter-floating-button svg {
+#extension-floating-button svg {
   width: 32px;
   height: 32px;
   display: block;
@@ -548,7 +548,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
 }
 
 /* High contrast adjustments */
-body.page-adapter-high-contrast #page-adapter-floating-button {
+body.page-adapter-high-contrast #extension-floating-button {
   border-width: 3px;
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
@@ -557,10 +557,10 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  #page-adapter-floating-button {
+  #extension-floating-button {
     transition: none;
   }
-  #page-adapter-floating-button:hover {
+  #extension-floating-button:hover {
     transform: none;
   }
 }

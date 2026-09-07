@@ -92,16 +92,18 @@ function isLegacyTopLeftPosition(position) {
  */
 export function createFloatingButton() {
   // Avoid duplicate injection.
-  if (document.querySelector('#page-adapter-floating-button')) {
+  if (document.querySelector('#extension-floating-button')) {
     return;
   }
 
   const button = document.createElement('button');
-  button.id = 'page-adapter-floating-button';
+  button.id = 'extension-floating-button';
   button.className = 'page-adapter-floating-button';
   button.setAttribute('aria-label', 'Open Page Adapter');
   button.setAttribute('title', 'Open Page Adapter');
   button.type = 'button';
+  // Mark this element as part of the extension UI so it is ignored in snapshots and transformations.
+  button.dataset.extension = 'true';
 
   // Load the power SVG icon.
   const powerIconUrl = chrome.runtime.getURL('src/assets/icons/accessibility.svg');

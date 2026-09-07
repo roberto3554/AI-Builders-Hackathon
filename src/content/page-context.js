@@ -212,10 +212,14 @@ function isElementVisible(element) {
  * @returns {boolean} True if the node should be included.
  */
 function isRelevantNode(element, text) {
-  // Skip extension-injected elements.
-  if (element.id && element.id.startsWith('page-adapter-')) return false;
-  if (element.classList && element.classList.contains('page-adapter-')) return false;
-  if (element.dataset && element.dataset.pageAdapterInjected) return false;
+  // Skip extension UI elements (any element inside a container with data-extension="true").
+  if (element.closest('[data-extension="true"]')) {
+    return false;
+  }
+  // Skip the injection marker on the root element (just in case).
+  if (element.dataset && element.dataset.pageAdapterInjected) {
+    return false;
+  }
   return true;
 }
 

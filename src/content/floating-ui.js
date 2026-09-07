@@ -18,17 +18,13 @@ const WINDOW_SIZE_STORAGE_KEY = 'pageAdapter:windowSize';
  * @param {number} height
  */
 export function saveWindowSize(width, height) {
-  // console.debug('[Page Adapter] saveWindowSize called with', { width, height });
   if (typeof width !== 'number' || isNaN(width) || width < 100) {
-    // console.debug('[Page Adapter] saveWindowSize: invalid width, aborting');
     return;
   }
   if (typeof height !== 'number' || isNaN(height) || height < 100) {
-    // console.debug('[Page Adapter] saveWindowSize: invalid height, aborting');
     return;
   }
   chrome.storage.local.set({ [WINDOW_SIZE_STORAGE_KEY]: { width, height } })
-    // .then(() => console.debug('[Page Adapter] saveWindowSize: saved successfully'))
     .catch(console.warn);
 }
 
@@ -37,20 +33,15 @@ export function saveWindowSize(width, height) {
  * @returns {Promise<{width: number, height: number} | null>}
  */
 export async function loadWindowSize() {
-  // console.debug('[Page Adapter] loadWindowSize: loading from storage');
   try {
     const result = await chrome.storage.local.get(WINDOW_SIZE_STORAGE_KEY);
     const data = result[WINDOW_SIZE_STORAGE_KEY];
-    // console.debug('[Page Adapter] loadWindowSize: raw data from storage', data);
     if (data && typeof data.width === 'number' && data.width > 0 &&
         typeof data.height === 'number' && data.height > 0) {
-      // console.debug('[Page Adapter] loadWindowSize: valid data found', data);
       return data;
     }
-    // console.debug('[Page Adapter] loadWindowSize: no valid data found, returning null');
     return null;
   } catch {
-    // console.debug('[Page Adapter] loadWindowSize: error reading storage');
     return null;
   }
 }
@@ -145,6 +136,8 @@ export function createFloatingWindow(
   wrapper.className = 'page-adapter-floating-window';
   wrapper._isDragging = false;
   wrapper._dragMoved = false;
+  // Mark this element as part of the extension UI so it is ignored in snapshots and transformations.
+  wrapper.dataset.extension = 'true';
 
   // Determine width and height with robust validation
   let width;

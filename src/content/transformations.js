@@ -10,6 +10,16 @@ import { showNotification } from './floating-ui.js';
 const DEBUG = true;
 
 /**
+ * Checks whether an element belongs to the extension UI (has data-extension="true" on itself or an ancestor).
+ *
+ * @param {Element} element - The DOM element to check.
+ * @returns {boolean} True if the element is part of the extension UI.
+ */
+function isExtensionElement(element) {
+  return !!element.closest('[data-extension="true"]');
+}
+
+/**
  * Applies a transformation to the page based on the payload.
  *
  * @param {object} payload - The transformation payload.
@@ -85,6 +95,10 @@ export function applySimplify() {
   ];
   hideSelectors.forEach((selector) => {
     document.querySelectorAll(selector).forEach((element) => {
+      // Skip extension UI elements.
+      if (isExtensionElement(element)) {
+        return;
+      }
       if (element.style.display !== 'none') {
         element.dataset.pageAdapterHidden = 'true';
         element.style.display = 'none';
@@ -96,7 +110,8 @@ export function applySimplify() {
 
 /**
  * Applies a high-contrast adaptation to the page.
- * This version forces styles on all elements that contain text or are interactive.
+ * This version forces styles on all elements that contain text or are interactive,
+ * but skips elements belonging to the extension UI.
  */
 export function applyHighContrastMode() {
   document.body.classList.add('page-adapter-high-contrast');
@@ -112,6 +127,11 @@ export function applyHighContrastMode() {
   }
 
   for (const el of allElements) {
+    // Skip extension UI elements.
+    if (isExtensionElement(el)) {
+      continue;
+    }
+
     const hasText = el.innerText && el.innerText.trim().length > 0;
     const isInteractive = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
 
