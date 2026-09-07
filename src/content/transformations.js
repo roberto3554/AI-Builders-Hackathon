@@ -7,6 +7,8 @@
 import { t } from '../shared/locale.js';
 import { showNotification } from './floating-ui.js';
 
+const DEBUG = true;
+
 /**
  * Applies a transformation to the page based on the payload.
  *
@@ -28,17 +30,13 @@ export function applyTransformation(payload) {
     case 'high_contrast':
       applyHighContrastMode();
       break;
-
     case 'simplify':
       applySimplify();
       break;
-
     case 'translate':
       applyTranslate();
       break;
-
-    default: {
-      // Heuristic based on request text.
+    default:
       const lower = request.toLowerCase();
       if (lower.includes('contrast') || lower.includes('high contrast') || lower.includes('dalt')) {
         applyHighContrastMode();
@@ -49,7 +47,6 @@ export function applyTransformation(payload) {
       } else {
         showNotification(`Request received: ${request}`);
       }
-    }
   }
 }
 
@@ -60,13 +57,11 @@ export function clearTransformations() {
   document.querySelectorAll('.page-adapter-transformation').forEach((element) => {
     element.remove();
   });
-
   document.body.classList.remove(
     'page-adapter-high-contrast',
     'page-adapter-simplify',
     'page-adapter-translate'
   );
-
   document.querySelectorAll('[data-page-adapter-hidden]').forEach((element) => {
     element.style.display = '';
     element.removeAttribute('data-page-adapter-hidden');
@@ -78,7 +73,6 @@ export function clearTransformations() {
  */
 export function applySimplify() {
   document.body.classList.add('page-adapter-simplify');
-
   const hideSelectors = [
     'img',
     'video',
@@ -89,7 +83,6 @@ export function applySimplify() {
     '.ad',
     '.banner',
   ];
-
   hideSelectors.forEach((selector) => {
     document.querySelectorAll(selector).forEach((element) => {
       if (element.style.display !== 'none') {
@@ -98,15 +91,49 @@ export function applySimplify() {
       }
     });
   });
-
   showNotification(t('notification.simplified'));
 }
 
 /**
  * Applies a high-contrast adaptation to the page.
+ * This version forces styles on all elements that contain text or are interactive.
  */
 export function applyHighContrastMode() {
   document.body.classList.add('page-adapter-high-contrast');
+
+  const allElements = document.querySelectorAll('*');
+  let totalElements = allElements.length;
+  let elementsWithText = 0;
+  let interactiveElements = 0;
+  let styledElements = 0;
+
+  if (DEBUG) {
+    console.debug('[transformations] applyHighContrastMode: total elements in page:', totalElements);
+  }
+
+  for (const el of allElements) {
+    const hasText = el.innerText && el.innerText.trim().length > 0;
+    const isInteractive = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
+
+    if (hasText || isInteractive) {
+      if (hasText) elementsWithText++;
+      if (isInteractive) interactiveElements++;
+      el.style.setProperty('color', '#ffffff', 'important');
+      el.style.setProperty('background-color', '#000000', 'important');
+      if (el.tagName === 'A') {
+        el.style.setProperty('color', '#ffff00', 'important');
+      }
+      styledElements++;
+    }
+  }
+
+  if (DEBUG) {
+    console.debug('[transformations] applyHighContrastMode: elements with text:', elementsWithText);
+    console.debug('[transformations] applyHighContrastMode: interactive elements:', interactiveElements);
+    console.debug('[transformations] applyHighContrastMode: elements actually styled:', styledElements);
+    console.debug('[transformations] applyHighContrastMode: coverage:', (styledElements / totalElements * 100).toFixed(1) + '%');
+  }
+
   showNotification(t('notification.high_contrast'));
 }
 

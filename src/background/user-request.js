@@ -15,11 +15,13 @@ import {
 import {
   handleDomAdaptation,
   MAX_DOM_ADAPTATION_STEPS,
-  MIN_HIGH_CONTRAST_ACTIONS,
 } from './ollama.js';
 
 const STORAGE_KEY = 'pageAdapter:lastRequest';
 const DEBUG = true;
+const MAX_ACTIONS_PER_ITERATION = 20;
+const MAX_TOTAL_ACTIONS = 1000;
+const MAX_FAILING_NODES_PER_ITERATION = 5;
 
 // =============================================================================
 // Helper: count nodes in a snapshot
@@ -33,21 +35,18 @@ const DEBUG = true;
  */
 function countNodes(snapshot) {
   let count = 0;
-
   function traverse(node) {
-    if (!node) {
-      return;
-    }
+    if (!node) return;
     count++;
     if (node.children && Array.isArray(node.children)) {
       for (const child of node.children) {
         traverse(child);
+        if (count > 10000) break;
       }
     }
   }
-
   traverse(snapshot.root);
-  return count || 1; // fallback to 1 to avoid division by zero
+  return count || 1;
 }
 
 // =============================================================================
@@ -64,7 +63,6 @@ function generateActionsSummary(actions) {
   if (!actions || actions.length === 0) {
     return 'No changes have been applied yet.';
   }
-
   const summary = actions.map((action, index) => {
     const actionDesc = action.action;
     const nodeId = action.nodeId || 'unknown node';
@@ -84,16 +82,71 @@ function generateActionsSummary(actions) {
     }
     return `${index + 1}. ${actionDesc} on node ${nodeId}${details ? ` (${details})` : ''}`;
   }).join('\n');
-
   return `Applied changes:\n${summary}`;
 }
 
 // =============================================================================
-// Helper: perform DOM adaptation via LLM
+// Helper: collect failing node IDs from a snapshot
 // =============================================================================
 
 /**
- * Executes the DOM adaptation loop using Ollama.
+ * Recursively collects node IDs with accessibility classification 'FAIL'.
+ *
+ * @param {object} node - The serialized node.
+ * @param {Array<string>} acc - Accumulator.
+ */
+function collectFailingNodeIds(node, acc) {
+  if (!node) return;
+  if (node.accessibility && node.accessibility.classification === 'FAIL') {
+    acc.push(node.id);
+  }
+  if (node.children) {
+    for (const child of node.children) {
+      collectFailingNodeIds(child, acc);
+    }
+  }
+}
+
+// =============================================================================
+// Helper: apply fallback high-contrast adaptation
+// =============================================================================
+
+/**
+ * Applies a robust fallback high-contrast adaptation by forcing styles on all
+ * visible elements that contain text.
+ *
+ * @param {number} tabId - The target tab ID.
+ * @returns {Promise<void>}
+ */
+async function applyFallbackHighContrast(tabId) {
+  console.warn('[user-request] Applying robust high-contrast fallback.');
+
+  // Use the transformation preset which applies styles to all text-containing elements.
+  await sendToContentScript(tabId, {
+    type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
+    payload: {
+      presetId: 'high_contrast',
+      request: 'Apply high contrast to all elements',
+    },
+  }).catch(() => {});
+
+  // Also force body styles.
+  await sendToContentScript(tabId, {
+    type: MESSAGE_TYPES.APPLY_DOM_TOOL,
+    payload: {
+      action: 'set_style',
+      nodeId: 'page-adapter-node-body',
+      style: { backgroundColor: '#000000', color: '#ffffff' },
+    },
+  }).catch(() => {});
+}
+
+// =============================================================================
+// Main adaptation loop
+// =============================================================================
+
+/**
+ * Executes the DOM adaptation loop using Ollama, iterating until no failing nodes remain.
  *
  * @param {number} tabId - The target tab ID.
  * @param {string} requestText - The user request text.
@@ -102,68 +155,121 @@ function generateActionsSummary(actions) {
  * @returns {Promise<object>} Result of the adaptation process.
  */
 async function performDomAdaptation(tabId, requestText, pageContextResult, presetId = null) {
-  let adaptationPlan = null;
-  let lastIteration = 0;
   let appliedActions = [];
   let hasPreviousActions = false;
   let previousActionsSummary = '';
+  let totalIterations = 0;
+  const modifiedNodeIds = new Set();
 
-  const totalNodes = countNodes(pageContextResult.snapshot);
-  // Maximum allowed destructive actions (10% of total nodes, but at least 1).
-  const maxDestructive = Math.max(1, Math.floor(totalNodes * 0.1));
-
-  // For high-contrast, we want to force at least 2 iterations if needed.
   const isHighContrast = presetId === 'high_contrast';
 
   for (let iteration = 1; iteration <= MAX_DOM_ADAPTATION_STEPS; iteration++) {
-    lastIteration = iteration;
+    totalIterations = iteration;
     if (DEBUG) {
       console.log(`[user-request] === Iteration ${iteration} of ${MAX_DOM_ADAPTATION_STEPS} ===`);
       console.log(`[user-request] Request: ${requestText}, Preset: ${presetId || 'none'}`);
       console.log(`[user-request] Applied actions so far: ${appliedActions.length}`);
     }
 
-    // Determine if we have previous actions (to inform the model).
+    // Refresh snapshot
+    const freshContext = await sendToContentScript(tabId, {
+      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
+    });
+    if (freshContext?.ok) {
+      pageContextResult = freshContext;
+    } else {
+      console.warn('[user-request] Could not refresh page snapshot; using previous.');
+    }
+
+    // Get all failing nodes
+    let allFailingNodeIds = [];
+    if (isHighContrast) {
+      collectFailingNodeIds(pageContextResult.snapshot.root, allFailingNodeIds);
+      
+      const failingSubset = allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION);
+      
+      if (DEBUG) {
+        console.log(`[user-request] Total failing nodes found: ${allFailingNodeIds.length}`);
+        console.log(`[user-request] Passing ${failingSubset.length} failing nodes to LLM (out of ${allFailingNodeIds.length})`);
+      }
+
+      if (allFailingNodeIds.length === 0) {
+        if (DEBUG) {
+          console.log('[user-request] No failing nodes remain. Adaptation complete.');
+        }
+        break;
+      }
+    } else {
+      // For other presets, only one iteration.
+      if (iteration > 1) break;
+    }
+
     hasPreviousActions = appliedActions.length > 0;
     previousActionsSummary = hasPreviousActions
       ? generateActionsSummary(appliedActions)
       : '';
 
-    adaptationPlan = await handleDomAdaptation({
-      request: requestText,
-      pageContext: {
-        context: pageContextResult.context,
-        snapshot: pageContextResult.snapshot,
-      },
-      iteration,
-      presetId,
-      hasPreviousActions,
-      previousActionsSummary,
-    });
+    let adaptationPlan = null;
+    try {
+      adaptationPlan = await handleDomAdaptation({
+        request: requestText,
+        pageContext: {
+          context: pageContextResult.context,
+          snapshot: pageContextResult.snapshot,
+        },
+        iteration,
+        presetId,
+        hasPreviousActions,
+        previousActionsSummary,
+        failingNodeIds: isHighContrast ? allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION) : [],
+      });
+    } catch (error) {
+      console.error('[user-request] LLM adaptation failed:', error);
+      if (isHighContrast) {
+        console.warn('[user-request] Falling back to built-in high-contrast adaptation.');
+        await applyFallbackHighContrast(tabId);
+        return {
+          ok: true,
+          plan: null,
+          iterations: iteration,
+          totalActions: appliedActions.length,
+          uniqueNodesModified: modifiedNodeIds.size,
+          fallback: true,
+        };
+      }
+      throw error;
+    }
 
     if (DEBUG) {
       console.log(`[user-request] Plan complete: ${adaptationPlan.complete}, actions: ${adaptationPlan.actions.length}`);
+      if (adaptationPlan.actions.length === 0) {
+        console.warn('[user-request] LLM generated zero actions. Falling back to fallback?');
+        if (isHighContrast) {
+          console.warn('[user-request] Forcing fallback high-contrast due to empty plan.');
+          await applyFallbackHighContrast(tabId);
+          return {
+            ok: true,
+            plan: null,
+            iterations: iteration,
+            totalActions: appliedActions.length,
+            uniqueNodesModified: modifiedNodeIds.size,
+            fallback: true,
+          };
+        }
+      }
       if (adaptationPlan.actions.length > 0) {
         console.log('[user-request] Actions:', JSON.stringify(adaptationPlan.actions, null, 2));
-      } else {
-        console.log('[user-request] No actions in this plan.');
       }
     }
 
-    // Validate that the plan does not contain too many destructive actions.
-    const destructiveActions = adaptationPlan.actions.filter(
-      (action) => action.action === 'remove_node' || action.action === 'hide_node'
-    );
-
-    if (destructiveActions.length > maxDestructive) {
-      console.error(`[user-request] Too many destructive actions: ${destructiveActions.length}`);
-      throw new Error(
-        `Too many destructive actions (${destructiveActions.length}) – aborting to prevent page damage.`
-      );
+    // Apply actions with per-iteration limit
+    let actions = adaptationPlan.actions;
+    if (actions.length > MAX_ACTIONS_PER_ITERATION) {
+      console.warn(`Truncating actions from ${actions.length} to ${MAX_ACTIONS_PER_ITERATION}`);
+      actions = actions.slice(0, MAX_ACTIONS_PER_ITERATION);
     }
 
-    // Execute each action.
-    for (const action of adaptationPlan.actions) {
+    for (const action of actions) {
       if (DEBUG) {
         console.log(`[user-request] Executing action: ${action.action} on node ${action.nodeId}`);
       }
@@ -171,78 +277,42 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
         type: MESSAGE_TYPES.APPLY_DOM_TOOL,
         payload: action,
       });
-
       if (!toolResult?.ok) {
         console.error('[user-request] Tool execution failed:', toolResult?.error);
         throw new Error(toolResult?.error || t('error.send_to_tab'));
       }
-      if (DEBUG) {
-        console.log('[user-request] Action executed successfully.');
+      if (action.nodeId) {
+        modifiedNodeIds.add(action.nodeId);
       }
     }
 
-    // Record applied actions.
-    appliedActions = appliedActions.concat(adaptationPlan.actions);
-    const currentActionCount = appliedActions.length;
+    appliedActions = appliedActions.concat(actions);
 
-    // --- Refresh the page snapshot after applying changes ---
-    const newPageContextResult = await sendToContentScript(tabId, {
-      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
-    });
-    if (newPageContextResult?.ok) {
-      pageContextResult = newPageContextResult;
-      if (DEBUG) {
-        console.log('[user-request] Page snapshot refreshed after iteration.');
-      }
-    } else {
-      console.warn('[user-request] Could not refresh page snapshot; continuing with previous snapshot.');
-      // Optionally break if we cannot get a fresh snapshot, but for now we continue.
+    if (appliedActions.length > MAX_TOTAL_ACTIONS) {
+      throw new Error(`Circuit breaker: applied ${appliedActions.length} actions, exceeding limit.`);
     }
 
-    // For high-contrast, we enforce a minimum number of actions.
-    // If the model says it's complete but we haven't reached the minimum, override.
-    let shouldComplete = adaptationPlan.complete;
-    if (isHighContrast && currentActionCount < MIN_HIGH_CONTRAST_ACTIONS) {
-      if (DEBUG) {
-        console.log(`[user-request] High-contrast: only ${currentActionCount} actions, need at least ${MIN_HIGH_CONTRAST_ACTIONS}, overriding complete=false`);
-      }
-      shouldComplete = false;
-    }
-
-    // Also, if no new actions were added in this iteration, break to avoid infinite loop.
-    const previousCount = iteration > 1 ? appliedActions.length - adaptationPlan.actions.length : 0;
-    if (adaptationPlan.actions.length === 0) {
-      if (DEBUG) {
-        console.log('[user-request] No new actions added, breaking loop.');
-      }
+    if (actions.length === 0) {
+      if (DEBUG) console.log('[user-request] No new actions, breaking loop.');
       break;
     }
 
-    if (shouldComplete) {
-      if (DEBUG) {
-        console.log('[user-request] Adaptation complete according to model.');
-      }
-      break;
-    }
-
-    // If we have reached the maximum iterations, break anyway.
-    if (iteration === MAX_DOM_ADAPTATION_STEPS) {
-      if (DEBUG) {
-        console.log(`[user-request] Reached max iterations (${MAX_DOM_ADAPTATION_STEPS}), stopping.`);
-      }
-      break;
-    }
+    if (!isHighContrast) break;
+    // For high-contrast, loop continues while there are failing nodes.
   }
 
   if (DEBUG) {
-    console.log(`[user-request] Total iterations: ${lastIteration}, total actions: ${appliedActions.length}`);
+    console.log(`[user-request] Total iterations: ${totalIterations}, total actions: ${appliedActions.length}`);
+    console.log(`[user-request] Unique nodes modified: ${modifiedNodeIds.size}`);
   }
 
   return {
     ok: true,
-    plan: adaptationPlan,
-    iterations: lastIteration,
+    plan: null,
+    iterations: totalIterations,
     totalActions: appliedActions.length,
+    uniqueNodesModified: modifiedNodeIds.size,
+    complete: true,
   };
 }
 
@@ -264,7 +334,6 @@ export async function handleUserRequest(message, providedTab = null) {
   }
 
   let tab;
-
   if (providedTab) {
     tab = providedTab;
   } else {
@@ -305,12 +374,11 @@ export async function handleUserRequest(message, providedTab = null) {
     const pageContextResult = await sendToContentScript(tab.id, {
       type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
     });
-
     if (!pageContextResult?.ok) {
       throw new Error(pageContextResult?.error || t('error.send_to_tab'));
     }
 
-    const requestText = message.payload.request; // For natural_language or preset request.
+    const requestText = message.payload.request;
     const presetId = message.payload.presetId || null;
     const result = await performDomAdaptation(tab.id, requestText, pageContextResult, presetId);
 
