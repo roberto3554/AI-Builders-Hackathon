@@ -1,13 +1,13 @@
 /**
  * @fileoverview Styles for the Page Adapter content script UI.
- * All styles are scoped to the injected panel and its children.
+ * All styles are scoped to the shadow root via :host and :host-context.
  * Theming via CSS variables, supports light/dark and high contrast.
  */
 
 /* ============================================================================
-   CSS Variables (Light theme default)
+   CSS Variables (Light theme default) – defined on :host
    ============================================================================ */
-:root {
+:host {
   --pa-bg-surface: #ffffff;
   --pa-bg-subtle: #f9fafb;
   --pa-bg-elevated: #ffffff;
@@ -36,35 +36,23 @@
   --pa-spacing-xl: 20px;
   --pa-spacing-2xl: 24px;
   --font-size-base: 1rem;
+  display: block;
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  color: var(--pa-text-primary);
+  line-height: 1.5;
+  all: initial; /* reset inherited styles */
+  display: block; /* reapply block display */
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  color: var(--pa-text-primary);
+  line-height: 1.5;
 }
 
 /* ============================================================================
-   Dark theme (system preference)
+   Dark theme (via host class)
    ============================================================================ */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --pa-bg-surface: #1e293b;
-    --pa-bg-subtle: #0f172a;
-    --pa-bg-elevated: #334155;
-    --pa-bg-input: #334155;
-    --pa-text-primary: #f1f5f9;
-    --pa-text-secondary: #94a3b8;
-    --pa-text-muted: #64748b;
-    --pa-text-light: #ffffff;
-    --pa-border-color: #475569;
-    --pa-border-input: #475569;
-    --pa-border-focus: #60a5fa;
-    --pa-primary: #3b82f6;
-    --pa-primary-hover: #2563eb;
-    --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
-    --font-size-base: 1rem;
-  }
-}
-
-/* ============================================================================
-   Theme override classes (applied to body)
-   ============================================================================ */
-body.page-adapter-theme-dark {
+:host-context(.page-adapter-theme-dark) {
   --pa-bg-surface: #1e293b;
   --pa-bg-subtle: #0f172a;
   --pa-bg-elevated: #334155;
@@ -81,27 +69,10 @@ body.page-adapter-theme-dark {
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
 }
 
-body.page-adapter-theme-light {
-  --pa-bg-surface: #ffffff;
-  --pa-bg-subtle: #f9fafb;
-  --pa-bg-elevated: #ffffff;
-  --pa-bg-input: #ffffff;
-  --pa-text-primary: #1f2937;
-  --pa-text-secondary: #6b7280;
-  --pa-text-muted: #9ca3af;
-  --pa-text-light: #ffffff;
-  --pa-border-color: #e5e7eb;
-  --pa-border-input: #d1d5db;
-  --pa-border-focus: #60a5fa;
-  --pa-primary: #2563eb;
-  --pa-primary-hover: #1d4ed8;
-  --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
-}
-
 /* ============================================================================
-   High contrast mode (applied via class on body)
+   High contrast mode (via host class)
    ============================================================================ */
-body.page-adapter-high-contrast {
+:host-context(.page-adapter-high-contrast) {
   --pa-bg-surface: #000000;
   --pa-bg-subtle: #000000;
   --pa-bg-elevated: #000000;
@@ -118,22 +89,22 @@ body.page-adapter-high-contrast {
   --pa-shadow-panel: none;
 }
 
-body.page-adapter-simplified .page-adapter-menu-header p,
-body.page-adapter-simplified .page-adapter-menu-section h2,
-body.page-adapter-simplified .page-adapter-input-label,
-body.page-adapter-simplified .page-adapter-counter {
+/* ============================================================================
+   Simplified UI (via host class) – hides some elements
+   ============================================================================ */
+:host-context(.page-adapter-simplified) .page-adapter-menu-header p,
+:host-context(.page-adapter-simplified) .page-adapter-menu-section h2,
+:host-context(.page-adapter-simplified) .page-adapter-input-label,
+:host-context(.page-adapter-simplified) .page-adapter-counter {
   display: none;
 }
-
-body.page-adapter-simplified .page-adapter-menu-container {
+:host-context(.page-adapter-simplified) .page-adapter-menu-container {
   gap: var(--pa-spacing-md);
 }
-
-body.page-adapter-simplified .page-adapter-preset-button span:last-child {
+:host-context(.page-adapter-simplified) .page-adapter-preset-button span:last-child {
   display: none;
 }
-
-body.page-adapter-simplified .page-adapter-input-footer {
+:host-context(.page-adapter-simplified) .page-adapter-input-footer {
   justify-content: flex-end;
 }
 
@@ -503,7 +474,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   position: fixed;
   top: 20px;
   right: 20px;
-  z-index: 2147483647; /* Max z-index to stay above everything */
+  z-index: 2147483647;
   width: 60px;
   height: 60px;
   border: 2px solid var(--pa-border-color);
@@ -518,7 +489,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   padding: 0;
   cursor: grab;
-  user-select: none; /* Prevent text selection during drag */
+  user-select: none;
 }
 
 #extension-floating-button:hover {
@@ -548,7 +519,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
 }
 
 /* High contrast adjustments */
-body.page-adapter-high-contrast #extension-floating-button {
+:host-context(.page-adapter-high-contrast) #extension-floating-button {
   border-width: 3px;
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
@@ -753,6 +724,7 @@ body.page-adapter-high-contrast #extension-floating-button {
 }
 
 .page-adapter-menu-textarea {
+  box-sizing: border-box;
   background: var(--pa-bg-input);
   border: 1px solid var(--pa-border-input);
   border-radius: var(--pa-radius-md);
@@ -832,13 +804,11 @@ body.page-adapter-high-contrast #extension-floating-button {
   color: #16a34a;
 }
 
-@media (prefers-color-scheme: dark) {
-  .page-adapter-status.error {
-    color: #f87171;
-  }
-  .page-adapter-status.success {
-    color: #4ade80;
-  }
+:host-context(.page-adapter-theme-dark) .page-adapter-status.error {
+  color: #f87171;
+}
+:host-context(.page-adapter-theme-dark) .page-adapter-status.success {
+  color: #4ade80;
 }
 
 .page-adapter-menu-preferences {
@@ -984,4 +954,10 @@ body.page-adapter-high-contrast #extension-floating-button {
   height: 24px;
   display: block;
   stroke: currentColor;
+}
+
+.page-adapter-floating-window *,
+.page-adapter-floating-window *::before,
+.page-adapter-floating-window *::after {
+  box-sizing: border-box;
 }

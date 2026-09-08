@@ -14,17 +14,16 @@ const DEBUG_SUMMARIZE = false;
 /**
  * Starts the summarize flow: loads marked, creates a floating window,
  * and generates a summary via Ollama (or uses debug mode).
- *
+ * @param {ShadowRoot} shadowRoot - The shadow root to attach the window to.
  * @returns {Promise<void>}
  */
-export async function applySummarize() {
+export async function applySummarize(shadowRoot) {
   console.debug('[applySummarize] Starting...');
   await loadMarked();
 
   const pageText = extractMainText();
   const pageTitle = document.title;
 
-  // Pass translated strings for the chat UI.
   const floatingWindow = createFloatingWindow(
     t('summary.generating'),
     '',
@@ -32,10 +31,18 @@ export async function applySummarize() {
     600,
     '80vh',
     t('chat.input_placeholder'),
-    t('chat.send_button')
+    t('chat.send_button'),
+    null,
+    null,
+    null,
+    0,
+    0,
+    null,
+    null,
+    shadowRoot
   );
 
-  document.body.appendChild(floatingWindow);
+  shadowRoot.appendChild(floatingWindow);
 
   const messagesContainer = floatingWindow.querySelector('.page-adapter-chat-messages');
   const input = floatingWindow.querySelector('.page-adapter-chat-input');
@@ -45,7 +52,6 @@ export async function applySummarize() {
     addMessage(messagesContainer, 'assistant', t('summary.generating'));
   }
 
-  // Debug mode: use test markdown.
   if (DEBUG_SUMMARIZE) {
     console.debug('[applySummarize] DEBUG mode: using test markdown');
 
@@ -90,7 +96,6 @@ Code block
     return;
   }
 
-  // Normal flow: ask Ollama.
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'SUMMARIZE_REQUEST',
@@ -127,11 +132,7 @@ Code block
 
 /**
  * Sets up chat event handlers for the floating window.
- *
- * @param {HTMLElement} messagesContainer - The container for chat messages.
- * @param {HTMLInputElement} input - The chat input element.
- * @param {HTMLButtonElement} sendButton - The send button.
- * @param {string} contextText - The page content for context.
+ * (unchanged)
  */
 export function setupChatHandlers(messagesContainer, input, sendButton, contextText) {
   if (!messagesContainer || !input || !sendButton) {
@@ -178,7 +179,6 @@ export function setupChatHandlers(messagesContainer, input, sendButton, contextT
     }
   }
 
-  // Remove previous listeners to avoid duplicates.
   sendButton.removeEventListener('click', sendQuestion);
   input.removeEventListener('keydown', handleKeydown);
 

@@ -22,7 +22,6 @@ const LEGACY_TOP_LEFT_TOLERANCE = 2;
 
 /**
  * Loads the saved button position from storage.
- *
  * @returns {Promise<object|null>} An object with `left` and `top` properties,
  *   or `null` if no position is saved.
  */
@@ -37,7 +36,6 @@ async function loadButtonPosition() {
 
 /**
  * Saves the button position to storage.
- *
  * @param {number} left - The left coordinate in pixels.
  * @param {number} top - The top coordinate in pixels.
  * @returns {Promise<void>}
@@ -84,15 +82,15 @@ function isLegacyTopLeftPosition(position) {
 // =============================================================================
 
 /**
- * Creates and injects the floating button into the document body.
+ * Creates and injects the floating button into the shadow root.
  * The button can be dragged to a new position, and its position is persisted.
  * A click (without dragging) opens the menu window.
- *
+ * @param {ShadowRoot} shadowRoot - The shadow root where the button will be placed.
  * @returns {void}
  */
-export function createFloatingButton() {
+export function createFloatingButton(shadowRoot) {
   // Avoid duplicate injection.
-  if (document.querySelector('#extension-floating-button')) {
+  if (shadowRoot.querySelector('#extension-floating-button')) {
     return;
   }
 
@@ -102,7 +100,7 @@ export function createFloatingButton() {
   button.setAttribute('aria-label', 'Open Page Adapter');
   button.setAttribute('title', 'Open Page Adapter');
   button.type = 'button';
-  // Mark this element as part of the extension UI so it is ignored in snapshots and transformations.
+  // Mark this element as part of the extension UI so it is ignored in snapshots.
   button.dataset.extension = 'true';
 
   // Load the power SVG icon.
@@ -120,12 +118,12 @@ export function createFloatingButton() {
       button.textContent = '⏻';
     });
 
-  document.body.appendChild(button);
+  shadowRoot.appendChild(button);
 
   const defaultPosition = getDefaultButtonPosition(button);
   setButtonPosition(button, defaultPosition.left, defaultPosition.top);
 
-  // Restore saved position when available, otherwise use top-right by default.
+  // Restore saved position when available.
   loadButtonPosition().then((pos) => {
     if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
       if (isLegacyTopLeftPosition(pos)) {
@@ -133,12 +131,10 @@ export function createFloatingButton() {
         saveButtonPosition(defaultPosition.left, defaultPosition.top);
         return;
       }
-
       const clamped = getClampedButtonPosition(button, pos.left, pos.top);
       setButtonPosition(button, clamped.left, clamped.top);
       return;
     }
-
     setButtonPosition(button, defaultPosition.left, defaultPosition.top);
   });
 
@@ -197,7 +193,6 @@ export function createFloatingButton() {
       let newLeft = initialLeft + deltaX;
       let newTop = initialTop + deltaY;
 
-      // Keep the button within the viewport with a margin.
       const clamped = getClampedButtonPosition(button, newLeft, newTop);
       setButtonPosition(button, clamped.left, clamped.top);
     }
@@ -205,7 +200,6 @@ export function createFloatingButton() {
 
   /**
    * Handles the end of a drag action.
-   * If the button was not moved, it's a click (handled separately).
    */
   function onDragEnd() {
     if (!isDragging) {
@@ -219,13 +213,11 @@ export function createFloatingButton() {
     button.style.transition = '';
 
     if (hasMoved) {
-      // Drag finished: persist the new position.
       const rect = button.getBoundingClientRect();
       saveButtonPosition(rect.left, rect.top);
     }
 
     isDragging = false;
-    // Do NOT reset hasMoved here; the click listener will check it.
   }
 
   /**
@@ -233,21 +225,15 @@ export function createFloatingButton() {
    * Opens the menu window only if the button was not dragged.
    */
   function onClick(event) {
-    // If a drag occurred, ignore the click.
     if (isDragging || hasMoved) {
-      // Reset flags for next interaction.
       hasMoved = false;
       return;
     }
-    createMenuWindow(button);
+    createMenuWindow(button, shadowRoot);
   }
 
   button.addEventListener('mousedown', onDragStart);
   button.addEventListener('click', onClick);
 }
-
-// =============================================================================
-// Exports
-// =============================================================================
 
 export { loadButtonPosition, saveButtonPosition };

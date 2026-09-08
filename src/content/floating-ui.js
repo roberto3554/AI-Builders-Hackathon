@@ -50,11 +50,11 @@ export async function loadWindowSize() {
 // Notification
 // ============================================================================
 
-export function showNotification(text) {
+export function showNotification(text, shadowRoot) {
   const notification = document.createElement('div');
   notification.className = 'page-adapter-toast page-adapter-transformation';
   notification.textContent = text;
-  document.body.appendChild(notification);
+  shadowRoot.appendChild(notification);
   setTimeout(() => notification.remove(), 3000);
 }
 
@@ -62,7 +62,7 @@ export function showNotification(text) {
 // Overlay
 // ============================================================================
 
-export function showOverlay(title, content) {
+export function showOverlay(title, content, shadowRoot) {
   const overlay = document.createElement('div');
   overlay.className = 'page-adapter-overlay page-adapter-transformation';
 
@@ -82,7 +82,7 @@ export function showOverlay(title, content) {
 
   inner.append(closeButton, titleElem, contentElem);
   overlay.appendChild(inner);
-  document.body.appendChild(overlay);
+  shadowRoot.appendChild(overlay);
 
   const close = () => overlay.remove();
   closeButton.addEventListener('click', close);
@@ -114,6 +114,7 @@ export function showOverlay(title, content) {
  * @param {number} moveOffsetY - Vertical offset from window's top for moveElement.
  * @param {number|null} initialWidth - Initial width (pixels).
  * @param {number|null} initialHeight - Initial height (pixels).
+ * @param {ShadowRoot} shadowRoot - The shadow root to append the window to.
  * @returns {HTMLElement} The window element.
  */
 export function createFloatingWindow(
@@ -130,13 +131,14 @@ export function createFloatingWindow(
   moveOffsetX = 0,
   moveOffsetY = 0,
   initialWidth = null,
-  initialHeight = null
+  initialHeight = null,
+  shadowRoot = null
 ) {
   const wrapper = document.createElement('div');
   wrapper.className = 'page-adapter-floating-window';
   wrapper._isDragging = false;
   wrapper._dragMoved = false;
-  // Mark this element as part of the extension UI so it is ignored in snapshots and transformations.
+  // Mark this element as part of the extension UI so it is ignored in snapshots.
   wrapper.dataset.extension = 'true';
 
   // Determine width and height with robust validation
@@ -264,7 +266,7 @@ export function createFloatingWindow(
     let newLeft = initialLeftPos + deltaX;
     let newTop = initialTopPos + deltaY;
     if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
-      wrapper._dragMoved = true;   // movement detected
+      wrapper._dragMoved = true;
     }
 
     const margin = 20;
@@ -394,8 +396,6 @@ export function createFloatingWindow(
       newHeight = resizeStartHeight - dy;
     }
 
-    // Compute limits based on the original maxWidth and maxHeight parameters
-    // and the current viewport.
     let maxWidthLimit;
     if (typeof maxWidth === 'number' && maxWidth > 0) {
       maxWidthLimit = Math.min(maxWidth, window.innerWidth - 40);
@@ -419,12 +419,9 @@ export function createFloatingWindow(
       maxHeightLimit = window.innerHeight - 40;
     }
 
-    // Apply limits
     newWidth = Math.max(minWidth, Math.min(newWidth, maxWidthLimit));
     newHeight = Math.max(minHeight, Math.min(newHeight, maxHeightLimit));
 
-    // Keep the opposite edge fixed when resizing from west/north.
-    // This prevents lateral/top drift after size reaches the max limit.
     if (dir.includes('w')) {
       newLeft = resizeStartRight - newWidth;
     }
@@ -432,7 +429,6 @@ export function createFloatingWindow(
       newTop = resizeStartBottom - newHeight;
     }
 
-    // Clamp position to viewport
     newLeft = Math.max(20, Math.min(newLeft, window.innerWidth - newWidth - 20));
     newTop = Math.max(20, Math.min(newTop, window.innerHeight - newHeight - 20));
 
@@ -442,7 +438,6 @@ export function createFloatingWindow(
     wrapper.style.top = newTop + 'px';
     wrapper.style.maxHeight = 'none';
 
-    // Update floating button position
     if (moveElement && buttonWidth > 0) {
       const newButtonLeft = newLeft + newWidth - buttonWidth;
       const newButtonTop = newTop;
@@ -460,7 +455,6 @@ export function createFloatingWindow(
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeEnd);
 
-    // Persist the new size
     const rect = wrapper.getBoundingClientRect();
     saveWindowSize(rect.width, rect.height);
   }
@@ -468,7 +462,6 @@ export function createFloatingWindow(
   wrapper.addEventListener('mousemove', onWrapperMouseMove);
   wrapper.addEventListener('mousedown', onWrapperMouseDown);
 
-  // Expose a save method for external use (e.g., when closing)
   wrapper._saveSize = () => {
     const rect = wrapper.getBoundingClientRect();
     saveWindowSize(rect.width, rect.height);

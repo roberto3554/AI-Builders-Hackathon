@@ -5,13 +5,11 @@
  */
 
 import { t } from '../shared/locale.js';
-import { showNotification } from './floating-ui.js';
 
 const DEBUG = true;
 
 /**
  * Checks whether an element belongs to the extension UI (has data-extension="true" on itself or an ancestor).
- *
  * @param {Element} element - The DOM element to check.
  * @returns {boolean} True if the element is part of the extension UI.
  */
@@ -21,18 +19,18 @@ function isExtensionElement(element) {
 
 /**
  * Applies a transformation to the page based on the payload.
- *
  * @param {object} payload - The transformation payload.
  * @param {string} payload.presetId - The preset identifier.
  * @param {string} payload.request - The natural language request.
+ * @param {function(string): void} notify - Callback to show a notification (receives message string).
  */
-export function applyTransformation(payload) {
+export function applyTransformation(payload, notify) {
   const { presetId, request } = payload;
 
   clearTransformations();
 
   if (presetId === 'summarize') {
-    showNotification(t('notification.summary_triggered') || 'AI summary generated (see panel)');
+    notify(t('notification.summary_triggered') || 'AI summary generated (see panel)');
     return;
   }
 
@@ -55,7 +53,7 @@ export function applyTransformation(payload) {
       } else if (lower.includes('traduc') || lower.includes('translate')) {
         applyTranslate();
       } else {
-        showNotification(`Request received: ${request}`);
+        notify(`Request received: ${request}`);
       }
   }
 }
@@ -95,7 +93,6 @@ export function applySimplify() {
   ];
   hideSelectors.forEach((selector) => {
     document.querySelectorAll(selector).forEach((element) => {
-      // Skip extension UI elements.
       if (isExtensionElement(element)) {
         return;
       }
@@ -105,7 +102,7 @@ export function applySimplify() {
       }
     });
   });
-  showNotification(t('notification.simplified'));
+  // Notification is handled by the caller via `notify`.
 }
 
 /**
@@ -127,7 +124,6 @@ export function applyHighContrastMode() {
   }
 
   for (const el of allElements) {
-    // Skip extension UI elements.
     if (isExtensionElement(el)) {
       continue;
     }
@@ -153,8 +149,6 @@ export function applyHighContrastMode() {
     console.debug('[transformations] applyHighContrastMode: elements actually styled:', styledElements);
     console.debug('[transformations] applyHighContrastMode: coverage:', (styledElements / totalElements * 100).toFixed(1) + '%');
   }
-
-  showNotification(t('notification.high_contrast'));
 }
 
 /**
@@ -163,5 +157,4 @@ export function applyHighContrastMode() {
 export function applyTranslate() {
   document.documentElement.lang = 'es';
   document.body.classList.add('page-adapter-translate');
-  showNotification(t('notification.translated'));
 }

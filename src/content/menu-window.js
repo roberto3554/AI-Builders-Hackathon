@@ -26,31 +26,31 @@ const BUTTON_SYNC_MARGIN = 20;
 const DEFAULT_BUTTON_SIZE = 60;
 
 // =============================================================================
-// State
+// State (per shadow root)
 // =============================================================================
 
 let activeWindow = null;
 let activeFloatingButton = null;
 
 // =============================================================================
-// Preferences helpers
+// Preferences helpers (applied to host)
 // =============================================================================
 
-function applyTheme(theme) {
-  document.body.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
+function applyThemeToHost(theme, host) {
+  host.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
   if (theme === 'dark') {
-    document.body.classList.add('page-adapter-theme-dark');
+    host.classList.add('page-adapter-theme-dark');
   } else if (theme === 'light') {
-    document.body.classList.add('page-adapter-theme-light');
+    host.classList.add('page-adapter-theme-light');
   }
 }
 
-function applyHighContrast(enabled) {
-  document.body.classList.toggle('page-adapter-high-contrast', enabled);
+function applyHighContrastToHost(enabled, host) {
+  host.classList.toggle('page-adapter-high-contrast', enabled);
 }
 
-function applySimplifiedUi(enabled) {
-  document.body.classList.toggle('page-adapter-simplified', enabled);
+function applySimplifiedUiToHost(enabled, host) {
+  host.classList.toggle('page-adapter-simplified', enabled);
 }
 
 function getDefaultStatusMessage() {
@@ -73,11 +73,6 @@ function clampMenuWindowPosition(windowElement, margin = VIEWPORT_MARGIN) {
   windowElement.style.transform = 'none';
 }
 
-function syncFloatingButtonWithWindow(windowElement, floatingButton) {
-  // This function is no longer used; kept for reference but can be removed.
-  // We now position the button based on the close button directly.
-}
-
 function updateFloatingWindowTitle(windowElement) {
   const titleElement = windowElement?.querySelector('.page-adapter-title-text');
   if (titleElement) {
@@ -86,14 +81,13 @@ function updateFloatingWindowTitle(windowElement) {
 }
 
 // =============================================================================
-// DOM building
+// DOM building (unchanged)
 // =============================================================================
 
 function buildMenuContent() {
   const container = document.createElement('div');
   container.className = 'page-adapter-menu-container';
 
-  // Subtitle (the title is now in the title bar)
   const subtitle = document.createElement('p');
   subtitle.className = 'page-adapter-menu-subtitle';
   subtitle.textContent = t('popup.subtitle');
@@ -184,7 +178,7 @@ function buildMenuContent() {
 }
 
 // =============================================================================
-// Rendering helpers
+// Rendering helpers (unchanged)
 // =============================================================================
 
 async function fetchSvgContent(url) {
@@ -275,7 +269,7 @@ function updateSelectOptions(languageSelect, themeSelect) {
 }
 
 // =============================================================================
-// Request sending
+// Request sending (unchanged)
 // =============================================================================
 
 async function sendRequest(message, statusElement, container) {
@@ -321,11 +315,12 @@ function setStatus(statusElement, message, type = '') {
 // Menu initialization
 // =============================================================================
 
-async function initMenuUI(container, windowElement, floatingButton, settingsButton) {
+async function initMenuUI(container, windowElement, floatingButton, settingsButton, shadowRoot) {
   const prefs = await loadPreferences();
-  applyTheme(prefs.theme);
-  applyHighContrast(prefs.highContrast);
-  applySimplifiedUi(prefs.simplifiedUi);
+  const host = shadowRoot.host;
+  applyThemeToHost(prefs.theme, host);
+  applyHighContrastToHost(prefs.highContrast, host);
+  applySimplifiedUiToHost(prefs.simplifiedUi, host);
   setLocale(prefs.locale);
   updateFloatingWindowTitle(windowElement);
 
@@ -405,31 +400,28 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     );
   });
 
-  // Settings button toggle
   settingsButton.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleSettingsPanel();
   });
 
-  // Close settings panel when clicking outside
   const handleDocumentClick = (event) => {
-    if (windowElement._dragMoved) {
-      windowElement._dragMoved = false;
+    const path = event.composedPath ? event.composedPath() : [event.target];
+
+    const isInsideSettingsPanel = path.some(el => el === settingsPanel || settingsPanel.contains?.(el));
+    const isInsideToggle = path.some(el => el === settingsButton || settingsButton.contains?.(el));
+    const isInsideContainer = path.some(el => el === container || container.contains?.(el));
+
+    if (isInsideSettingsPanel || isInsideToggle) {
       return;
     }
 
-    if (windowElement._isDragging) {
-      return;
-    }
-
-    if (!container.contains(event.target)) {
+    if (!isInsideContainer) {
       closeSettingsPanel();
       return;
     }
 
-    if (!settingsPanel.hidden &&
-        !event.target.closest('#menu-settings-panel') &&
-        !event.target.closest('#menu-settings-toggle')) {
+    if (!settingsPanel.hidden && !isInsideSettingsPanel && !isInsideToggle) {
       closeSettingsPanel();
     }
   };
@@ -470,7 +462,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     const newPrefs = await loadPreferences();
     newPrefs.theme = theme;
     await savePreferences(newPrefs);
-    applyTheme(theme);
+    applyThemeToHost(theme, shadowRoot.host);
 
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -500,7 +492,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     const newPrefs = await loadPreferences();
     newPrefs.highContrast = enabled;
     await savePreferences(newPrefs);
-    applyHighContrast(enabled);
+    applyHighContrastToHost(enabled, shadowRoot.host);
 
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -522,7 +514,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     const newPrefs = await loadPreferences();
     newPrefs.simplifiedUi = enabled;
     await savePreferences(newPrefs);
-    applySimplifiedUi(enabled);
+    applySimplifiedUiToHost(enabled, shadowRoot.host);
 
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -545,7 +537,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
 // Window creation and management
 // =============================================================================
 
-export async function createMenuWindow(floatingButton) {
+export async function createMenuWindow(floatingButton, shadowRoot) {
   if (activeWindow) {
     return;
   }
@@ -577,8 +569,7 @@ export async function createMenuWindow(floatingButton) {
     const buttonCenterX = rect.left + rect.width / 2;
     const buttonCenterY = rect.top + rect.height / 2;
 
-    // Offsets to align the close button's center with the floating button's center
-    const closeButtonSize = 40; // new size
+    const closeButtonSize = 40;
     const halfClose = closeButtonSize / 2;
     const titleBarPaddingTop = 12;
     const titleBarPaddingRight = 16;
@@ -615,14 +606,15 @@ export async function createMenuWindow(floatingButton) {
       moveOffsetX,
       moveOffsetY,
       actualWidth,
-      actualHeight
+      actualHeight,
+      shadowRoot
     );
 
     if (!windowElement) {
       throw new Error('createFloatingWindow returned null or undefined');
     }
 
-    document.body.appendChild(windowElement);
+    shadowRoot.appendChild(windowElement);
 
     clampMenuWindowPosition(windowElement);
 
@@ -632,16 +624,13 @@ export async function createMenuWindow(floatingButton) {
       throw new Error('Title bar not found');
     }
 
-    // Clear existing content (remove old title and close button)
     titleBar.innerHTML = '';
 
-    // Title text
     const titleSpan = document.createElement('span');
     titleSpan.className = 'page-adapter-title-text';
     titleSpan.textContent = t('popup.title');
     titleBar.appendChild(titleSpan);
 
-    // Settings button
     const settingsBtn = document.createElement('button');
     settingsBtn.id = 'menu-settings-toggle';
     settingsBtn.className = 'page-adapter-settings-toggle';
@@ -651,7 +640,6 @@ export async function createMenuWindow(floatingButton) {
     settingsBtn.title = t('popup.preferences.settings');
     settingsBtn.type = 'button';
 
-    // Load settings icon
     const settingsIconUrl = chrome.runtime.getURL('src/assets/icons/settings.svg');
     try {
       const svg = await fetchSvgContent(settingsIconUrl);
@@ -662,13 +650,11 @@ export async function createMenuWindow(floatingButton) {
 
     titleBar.appendChild(settingsBtn);
 
-    // Close button (power icon)
     const closeBtn = document.createElement('button');
     closeBtn.className = 'page-adapter-close';
     closeBtn.setAttribute('aria-label', 'Close menu');
     closeBtn.type = 'button';
 
-    // Load power icon
     const powerIconUrl = chrome.runtime.getURL('src/assets/icons/accessibility.svg');
     try {
       const svg = await fetchSvgContent(powerIconUrl);
@@ -683,7 +669,6 @@ export async function createMenuWindow(floatingButton) {
 
     titleBar.appendChild(closeBtn);
 
-    // Build menu content
     const contentArea = windowElement.querySelector('.page-adapter-content-area');
     if (!contentArea) {
       throw new Error('Content area not found');
@@ -692,7 +677,7 @@ export async function createMenuWindow(floatingButton) {
     const menuContainer = buildMenuContent();
     contentArea.appendChild(menuContainer);
 
-    await initMenuUI(menuContainer, windowElement, floatingButton, settingsBtn);
+    await initMenuUI(menuContainer, windowElement, floatingButton, settingsBtn, shadowRoot);
 
     activeWindow = windowElement;
   } catch (error) {
@@ -707,12 +692,10 @@ export async function createMenuWindow(floatingButton) {
 
 export function closeMenuWindow() {
   if (activeWindow) {
-    // Save the current size before closing
     const rect = activeWindow.getBoundingClientRect();
     saveWindowSize(rect.width, rect.height);
 
     if (activeFloatingButton) {
-      // Position the floating button exactly at the center of the close button
       const closeBtn = activeWindow.querySelector('.page-adapter-close');
       if (closeBtn) {
         const closeRect = closeBtn.getBoundingClientRect();
@@ -722,7 +705,6 @@ export function closeMenuWindow() {
         const left = closeRect.left + closeRect.width / 2 - w / 2;
         const top = closeRect.top + closeRect.height / 2 - h / 2;
 
-        // Clamp to viewport margins
         const margin = 20;
         const maxLeft = window.innerWidth - w - margin;
         const maxTop = window.innerHeight - h - margin;
@@ -734,7 +716,6 @@ export function closeMenuWindow() {
         activeFloatingButton.style.transform = 'none';
         saveButtonPosition(clampedLeft, clampedTop);
       } else {
-        // Fallback: use the window's top-right corner (approximate)
         const btnRect = activeFloatingButton.getBoundingClientRect();
         const w = btnRect.width || 60;
         const h = btnRect.height || 60;

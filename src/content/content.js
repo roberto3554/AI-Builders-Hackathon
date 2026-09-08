@@ -1,5 +1,6 @@
 /**
  * @fileoverview Content script entry point for the Page Adapter extension.
+ * Creates a Shadow DOM root for the extension UI to isolate styles.
  * Responsibilities: set up message listener, coordinate page manipulations.
  * Dependencies: dynamic imports of content modules.
  * Used by: background service worker via chrome.tabs.sendMessage.
@@ -8,7 +9,38 @@
 console.log('[Page Adapter] Content script loaded');
 
 // =============================================================================
-// Self-injection marker
+// Shadow DOM setup
+// =============================================================================
+
+// Create host element and attach shadow root.
+const host = document.createElement('div');
+host.id = 'page-adapter-host';
+// Ensure the host is not affected by page styles.
+host.style.all = 'initial';
+document.documentElement.appendChild(host);
+
+const shadowRoot = host.attachShadow({ mode: 'open' });
+
+// Load and inject CSS into shadow root.
+(async function loadStyles() {
+  try {
+    const cssUrl = chrome.runtime.getURL('src/content/content.css');
+    const response = await fetch(cssUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to load CSS: ${response.status}`);
+    }
+    const cssText = await response.text();
+    const styleEl = document.createElement('style');
+    styleEl.textContent = cssText;
+    shadowRoot.appendChild(styleEl);
+    console.log('[Page Adapter] CSS injected into shadow root');
+  } catch (error) {
+    console.error('[Page Adapter] Failed to load content CSS:', error);
+  }
+})();
+
+// =============================================================================
+// Self-injection marker (still useful for the page)
 // =============================================================================
 
 if (!document.documentElement.dataset.pageAdapterInjected) {
@@ -16,49 +48,29 @@ if (!document.documentElement.dataset.pageAdapterInjected) {
 }
 
 // =============================================================================
-// Theme & locale handling
+// Theme & locale handling (now applied to shadow root via classes on host)
 // =============================================================================
 
 /**
- * Loads the locale module dynamically.
- *
- * @returns {Promise<object>} The locale module containing `setLocale` and `t`.
- */
-async function loadLocaleModule() {
-  // `import()` works because the module is declared as web_accessible_resource.
-  return import('../shared/locale.js');
-}
-
-/**
- * Loads the shared preferences module dynamically.
- *
- * @returns {Promise<object>} The preferences module containing storage helpers.
- */
-async function loadPreferencesModule() {
-  return import('../shared/preferences.js');
-}
-
-/**
- * Applies the theme by adding/removing classes on the document body.
- *
+ * Applies the theme by adding/removing classes on the host element.
+ * These classes will be used in shadow CSS via :host-context.
  * @param {string} theme - 'system', 'light', or 'dark'.
  */
 function applyTheme(theme) {
-  document.body.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
+  host.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
   if (theme === 'dark') {
-    document.body.classList.add('page-adapter-theme-dark');
+    host.classList.add('page-adapter-theme-dark');
   } else if (theme === 'light') {
-    document.body.classList.add('page-adapter-theme-light');
+    host.classList.add('page-adapter-theme-light');
   }
-  // 'system' → no class, media query prevails
 }
 
 function applyHighContrast(enabled) {
-  document.body.classList.toggle('page-adapter-high-contrast', enabled);
+  host.classList.toggle('page-adapter-high-contrast', enabled);
 }
 
 function applySimplifiedUi(enabled) {
-  document.body.classList.toggle('page-adapter-simplified', enabled);
+  host.classList.toggle('page-adapter-simplified', enabled);
 }
 
 // =============================================================================
@@ -68,7 +80,6 @@ function applySimplifiedUi(enabled) {
 /**
  * Listens for runtime messages from the background script.
  * Delegates to specific handlers based on message type using dynamic imports.
- *
  * @param {object} message - The received message.
  * @param {object} sender - Sender information (unused).
  * @param {function} sendResponse - Callback to send a response.
@@ -115,7 +126,7 @@ async function onRuntimeMessage(message, sender, sendResponse) {
       }
 
       case 'SET_LOCALE': {
-        const { setLocale } = await loadLocaleModule();
+        const { setLocale } = await import('../shared/locale.js');
         setLocale(message.payload.locale);
         sendResponse({ ok: true });
         return true;
@@ -130,7 +141,10 @@ async function onRuntimeMessage(message, sender, sendResponse) {
 
       case 'APPLY_TRANSFORMATION': {
         const { applyTransformation } = await import('./transformations.js');
-        applyTransformation(message.payload);
+        const { showNotification } = await import('./floating-ui.js');
+        // Pass a callback that shows notification inside the shadow root.
+        const notify = (msg) => showNotification(msg, shadowRoot);
+        applyTransformation(message.payload, notify);
         sendResponse({ ok: true });
         return true;
       }
@@ -138,7 +152,7 @@ async function onRuntimeMessage(message, sender, sendResponse) {
       case 'START_SUMMARIZE':
       case 'SUMMARIZE_PAGE': {
         const { applySummarize } = await import('./summarizer.js');
-        applySummarize().catch((error) => {
+        applySummarize(shadowRoot).catch((error) => {
           console.error('[Page Adapter] Summarize error:', error);
         });
         sendResponse({ ok: true });
@@ -146,7 +160,6 @@ async function onRuntimeMessage(message, sender, sendResponse) {
       }
 
       default: {
-        // Ignore unknown message types.
         break;
       }
     }
@@ -161,21 +174,21 @@ async function onRuntimeMessage(message, sender, sendResponse) {
 chrome.runtime.onMessage.addListener(onRuntimeMessage);
 
 // =============================================================================
-// Initialize – apply stored preferences
+// Initialize – apply stored preferences and create floating button
 // =============================================================================
 
 (async function initContent() {
-  const { loadPreferences } = await loadPreferencesModule();
+  const { loadPreferences } = await import('../shared/preferences.js');
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
   applyHighContrast(prefs.highContrast);
   applySimplifiedUi(prefs.simplifiedUi);
 
   // Load locale module and set the locale.
-  const { setLocale } = await loadLocaleModule();
+  const { setLocale } = await import('../shared/locale.js');
   setLocale(prefs.locale);
 
-  // Inject the floating button.
+  // Inject the floating button inside the shadow root.
   const { createFloatingButton } = await import('./floating-button.js');
-  createFloatingButton();
+  createFloatingButton(shadowRoot);
 })();

@@ -24,16 +24,15 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/content/content.js"],
-      "css": ["src/content/content.css"],
+      "js": ["src/content/bootstrap.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "src/lib/marked.umd.js",
-        "src/lib/marked.esm.js",
+        "src/content/bootstrap.js",
+        "src/content/content.js",
         "src/content/page-context.js",
         "src/content/dom-tools.js",
         "src/content/transformations.js",
@@ -42,6 +41,7 @@
         "src/content/marked-loader.js",
         "src/content/floating-button.js",
         "src/content/menu-window.js",
+        "src/content/content.css",
         "src/shared/constants.js",
         "src/shared/preferences.js",
         "src/shared/locale.js",
@@ -49,7 +49,9 @@
         "src/locales/index.js",
         "src/locales/en.js",
         "src/locales/es.js",
-        "src/assets/icons/*.svg"
+        "src/assets/icons/*.svg",
+        "src/lib/marked.umd.js",
+        "src/lib/marked.esm.js"
       ],
       "matches": ["<all_urls>"]
     }
