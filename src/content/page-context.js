@@ -6,9 +6,9 @@
 
 const DEBUG = true; // Enable detailed logging
 
-const MAX_SNAPSHOT_DEPTH = 15; // Increased to capture deeper nesting
-const MAX_CHILDREN_PER_NODE = 20; // Increased to include more children
-const MAX_TEXT_LENGTH = 160;
+const MAX_SNAPSHOT_DEPTH = 20; // Increased to capture deeper nesting
+const MAX_CHILDREN_PER_NODE = 80; // Increased to include more children
+const MAX_TEXT_LENGTH = 2000;
 
 const nodeIdMap = new WeakMap();
 let nextNodeId = 1;
@@ -264,6 +264,8 @@ function getFilteredStyle(computedStyle) {
  * @returns {object | null} The serialized node or null when the element should be skipped.
  */
 function serializeElement(element, depth, parentEffectiveBackground, stats) {
+  console.log('[DEBUG] Procesando:', element.tagName, 'id:', element.id, 'depth:', depth);
+
   if (depth > MAX_SNAPSHOT_DEPTH || !isElementVisible(element)) {
     return null;
   }
