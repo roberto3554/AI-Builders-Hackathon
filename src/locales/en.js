@@ -9,7 +9,6 @@ export default {
   // Popup UI
   // ===========================================================================
   'popup.title': 'Page Adapter',
-  'popup.subtitle': 'Adapt the page to your needs.',
   'popup.quick_actions': 'Quick actions',
   'popup.write_need': 'Or write what you need',
   'popup.placeholder': 'E.g.: Make this page simpler and hide non‑essential elements.',
@@ -19,6 +18,7 @@ export default {
   'popup.status.sending': 'Sending request…',
   'popup.status.success': 'Request sent to the page.',
   'popup.error.generic': 'An error occurred.',
+  'popup.cancel_button': 'Cancel',
 
   // ===========================================================================
   // Popup – Preferences

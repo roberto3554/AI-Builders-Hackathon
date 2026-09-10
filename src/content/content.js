@@ -149,7 +149,6 @@ async function onRuntimeMessage(message, sender, sendResponse) {
         return true;
       }
 
-      case 'START_SUMMARIZE':
       case 'SUMMARIZE_PAGE': {
         const { applySummarize } = await import('./summarizer.js');
         applySummarize(shadowRoot).catch((error) => {

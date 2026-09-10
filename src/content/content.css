@@ -268,8 +268,9 @@
 }
 
 .page-adapter-chat-message.assistant .page-adapter-chat-bubble {
-  background: var(--pa-bg-subtle);
+  background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
+  border: 1px solid var(--pa-border-color);
 }
 
 /* Markdown content inside chat bubbles */
@@ -960,4 +961,352 @@
 .page-adapter-floating-window *::before,
 .page-adapter-floating-window *::after {
   box-sizing: border-box;
+}
+
+/* ============================================================================
+   Back button (in title bar)
+   ============================================================================ */
+.page-adapter-back-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: none;  /* hidden by default, shown in chat view */
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex: 0 0 40px;
+}
+
+.page-adapter-back-button:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-back-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-back-button svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+  stroke: currentColor;
+  fill: currentColor;
+}
+
+/* Chat view container */
+.page-adapter-chat-view {
+  display: none;  /* hidden by default, shown via JS */
+  flex-direction: column;
+  height: 100%;
+  gap: var(--pa-spacing-sm);
+}
+
+/* Ensure chat messages take available space */
+.page-adapter-chat-view .page-adapter-chat-messages {
+  flex: 1;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Make the chat input area stick to the bottom */
+.page-adapter-chat-view .page-adapter-chat-input-area {
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   la-05 thinking indicator (adapted to shadow DOM)
+   ============================================================================ */
+.page-adapter-thinking-indicator .la-05__bubble {
+  position: relative;
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--pa-radius-md) var(--pa-radius-md) var(--pa-radius-md) 0.35rem;
+  background: var(--pa-bg-surface);
+  border: 1px solid var(--pa-border-color);
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+  box-shadow: 0 20px 40px -28px var(--pa-shadow-panel);
+  inline-size: max-content;
+  min-inline-size: 11.5rem;
+  max-inline-size: min(100%, 18rem);
+}
+
+.page-adapter-thinking-indicator .la-05__tail {
+  position: absolute;
+  inset-block-end: -1px;
+  inset-inline-start: -0.3rem;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  background: var(--pa-bg-surface);
+  border-inline-start: 1px solid var(--pa-border-color);
+  border-block-end: 1px solid var(--pa-border-color);
+  border-end-start-radius: 0.2rem;
+  rotate: 45deg;
+}
+
+.page-adapter-thinking-indicator .la-05__dots {
+  display: flex;
+  gap: 0.34rem;
+  padding-block: 0.15rem;
+}
+
+.page-adapter-thinking-indicator .la-05__dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background: var(--pa-primary);
+  opacity: 0.55;
+  animation: la-05-bounce 1.25s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+}
+
+.page-adapter-thinking-indicator .la-05__dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.page-adapter-thinking-indicator .la-05__dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes la-05-bounce {
+  0%, 60%, 100% {
+    translate: 0 0;
+    opacity: 0.5;
+  }
+  30% {
+    translate: 0 -0.5rem;
+    opacity: 1;
+  }
+}
+
+@supports (animation-timing-function: linear(0, 1)) {
+  .page-adapter-thinking-indicator .la-05__dot {
+    animation-timing-function: linear(0, 0.18 12%, 0.62 26%, 1 42%, 0.82 58%, 1 74%, 0.95 88%, 1);
+  }
+}
+
+.page-adapter-thinking-indicator .la-05__phase {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--pa-text-muted) 28%, var(--pa-text-primary) 48%, var(--pa-text-muted) 68%) 0 0 / 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: la-05-shimmer 2.8s linear infinite;
+}
+
+@keyframes la-05-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.page-adapter-thinking-indicator .la-05__answer {
+  display: none;
+  gap: 0.4rem;
+  inline-size: 13rem;
+}
+
+.page-adapter-thinking-indicator .la-05__answer i {
+  display: block;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--pa-text-primary) 12%, transparent);
+}
+
+.page-adapter-thinking-indicator .la-05__answer i:nth-child(2) {
+  inline-size: 88%;
+}
+.page-adapter-thinking-indicator .la-05__answer i:nth-child(3) {
+  inline-size: 62%;
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-thinking-indicator * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .page-adapter-thinking-indicator .la-05__dot {
+    opacity: 1;
+  }
+  .page-adapter-thinking-indicator .la-05__dot:nth-child(2) {
+    opacity: 0.6;
+  }
+  .page-adapter-thinking-indicator .la-05__dot:nth-child(3) {
+    opacity: 0.35;
+  }
+  .page-adapter-thinking-indicator .la-05__phase {
+    background: none;
+    color: var(--pa-text-primary);
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* ============================================================================
+   Scrollbars (modern, minimal, theme-aware)
+   ============================================================================ */
+
+/* Containers that scroll */
+.page-adapter-chat-messages,
+.page-adapter-content-area,
+.page-adapter-overlay-content {
+  scrollbar-width: auto;
+  scrollbar-color: var(--pa-border-color) transparent;
+  scrollbar-gutter: stable;
+}
+
+/* WebKit (Chromium, Safari) */
+.page-adapter-chat-messages::-webkit-scrollbar,
+.page-adapter-content-area::-webkit-scrollbar,
+.page-adapter-overlay-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-track,
+.page-adapter-content-area::-webkit-scrollbar-track,
+.page-adapter-overlay-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-thumb,
+.page-adapter-content-area::-webkit-scrollbar-thumb,
+.page-adapter-overlay-content::-webkit-scrollbar-thumb {
+  background-color: var(--pa-border-color);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-thumb:hover,
+.page-adapter-content-area::-webkit-scrollbar-thumb:hover,
+.page-adapter-overlay-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--pa-text-secondary);
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-corner,
+.page-adapter-content-area::-webkit-scrollbar-corner,
+.page-adapter-overlay-content::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Separation between quick actions and the request input */
+.page-adapter-input-section {
+  margin-top: var(--pa-spacing-lg);
+  padding-top: var(--pa-spacing-lg);
+  border-top: 1px solid var(--pa-border-color);
+}
+
+/* ============================================================================
+   Cancel button
+   ============================================================================ */
+.page-adapter-cancel-button {
+  background: transparent;
+  border: 1px solid var(--pa-border-input);
+  border-radius: 9px;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 15px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.page-adapter-cancel-button:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+  border-color: var(--pa-border-input);
+}
+
+.page-adapter-cancel-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Active preset button (shimmer reflecting background)
+   ============================================================================ */
+.page-adapter-preset-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-adapter-preset-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-adapter-preset-button--active::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    color-mix(in oklab, var(--pa-primary) 60%, white) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: page-adapter-sheen 1.6s linear infinite;
+  opacity: 1;
+  mix-blend-mode: screen;
+}
+
+@keyframes page-adapter-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-preset-button--active::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ============================================================================
+   Transient status message (main view)
+   ============================================================================ */
+.page-adapter-transient-status {
+  position: absolute;
+  bottom: var(--pa-spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 80%;
+  padding: var(--pa-spacing-sm) var(--pa-spacing-lg);
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-bg-elevated);
+  color: var(--pa-text-primary);
+  border: 1px solid var(--pa-border-color);
+  box-shadow: var(--pa-shadow-panel);
+  font-size: 13px;
+  text-align: center;
+  z-index: 10;
+  animation: pa-fade-in 0.15s ease;
+}
+
+.page-adapter-transient-status--error {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+:host-context(.page-adapter-theme-dark) .page-adapter-transient-status--error {
+  border-color: #f87171;
+  color: #f87171;
 }

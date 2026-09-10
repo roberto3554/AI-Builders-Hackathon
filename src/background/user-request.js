@@ -15,6 +15,7 @@ import {
 import {
   handleDomAdaptation,
   MAX_DOM_ADAPTATION_STEPS,
+  handleSummarize,
 } from './ollama.js';
 
 const STORAGE_KEY = 'pageAdapter:lastRequest';
@@ -120,8 +121,6 @@ function collectFailingNodeIds(node, acc) {
  */
 async function applyFallbackHighContrast(tabId) {
   console.warn('[user-request] Applying robust high-contrast fallback.');
-
-  // Use the transformation preset which applies styles to all text-containing elements.
   await sendToContentScript(tabId, {
     type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
     payload: {
@@ -129,8 +128,6 @@ async function applyFallbackHighContrast(tabId) {
       request: 'Apply high contrast to all elements',
     },
   }).catch(() => {});
-
-  // Also force body styles.
   await sendToContentScript(tabId, {
     type: MESSAGE_TYPES.APPLY_DOM_TOOL,
     payload: {
@@ -152,7 +149,7 @@ async function applyFallbackHighContrast(tabId) {
  * @param {string} requestText - The user request text.
  * @param {object} pageContextResult - Result from GET_PAGE_CONTEXT.
  * @param {string|null} presetId - Preset identifier (if any).
- * @returns {Promise<object>} Result of the adaptation process.
+ * @returns {Promise<{summary: string, iterations: number, totalActions: number, uniqueNodesModified: number, complete: boolean}>}
  */
 async function performDomAdaptation(tabId, requestText, pageContextResult, presetId = null) {
   let appliedActions = [];
@@ -160,6 +157,7 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
   let previousActionsSummary = '';
   let totalIterations = 0;
   const modifiedNodeIds = new Set();
+  let lastSummary = '';
 
   const isHighContrast = presetId === 'high_contrast';
 
@@ -185,14 +183,11 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
     let allFailingNodeIds = [];
     if (isHighContrast) {
       collectFailingNodeIds(pageContextResult.snapshot.root, allFailingNodeIds);
-      
       const failingSubset = allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION);
-      
       if (DEBUG) {
         console.log(`[user-request] Total failing nodes found: ${allFailingNodeIds.length}`);
         console.log(`[user-request] Passing ${failingSubset.length} failing nodes to LLM (out of ${allFailingNodeIds.length})`);
       }
-
       if (allFailingNodeIds.length === 0) {
         if (DEBUG) {
           console.log('[user-request] No failing nodes remain. Adaptation complete.');
@@ -229,12 +224,11 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
         console.warn('[user-request] Falling back to built-in high-contrast adaptation.');
         await applyFallbackHighContrast(tabId);
         return {
-          ok: true,
-          plan: null,
+          summary: 'Applied high-contrast fallback (all text and interactive elements).',
           iterations: iteration,
           totalActions: appliedActions.length,
           uniqueNodesModified: modifiedNodeIds.size,
-          fallback: true,
+          complete: true,
         };
       }
       throw error;
@@ -248,18 +242,22 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
           console.warn('[user-request] Forcing fallback high-contrast due to empty plan.');
           await applyFallbackHighContrast(tabId);
           return {
-            ok: true,
-            plan: null,
+            summary: 'Applied high-contrast fallback (all text and interactive elements).',
             iterations: iteration,
             totalActions: appliedActions.length,
             uniqueNodesModified: modifiedNodeIds.size,
-            fallback: true,
+            complete: true,
           };
         }
       }
       if (adaptationPlan.actions.length > 0) {
         console.log('[user-request] Actions:', JSON.stringify(adaptationPlan.actions, null, 2));
       }
+    }
+
+    // Store the summary from this plan
+    if (adaptationPlan.summary) {
+      lastSummary = adaptationPlan.summary;
     }
 
     // Apply actions with per-iteration limit
@@ -306,9 +304,17 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
     console.log(`[user-request] Unique nodes modified: ${modifiedNodeIds.size}`);
   }
 
+  // If no summary was captured, generate a default one
+  if (!lastSummary) {
+    if (appliedActions.length > 0) {
+      lastSummary = `Applied ${appliedActions.length} DOM changes to adapt the page.`;
+    } else {
+      lastSummary = 'No changes were needed.';
+    }
+  }
+
   return {
-    ok: true,
-    plan: null,
+    summary: lastSummary,
     iterations: totalIterations,
     totalActions: appliedActions.length,
     uniqueNodesModified: modifiedNodeIds.size,
@@ -325,7 +331,7 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
  *
  * @param {object} message - The user request message.
  * @param {chrome.tabs.Tab} [providedTab] - Optional tab object, used for context menu actions.
- * @returns {Promise<object>} Response indicating success or failure.
+ * @returns {Promise<object>} Response containing ok, request, and responseText.
  * @throws Will throw if the active tab cannot be determined or if injection fails.
  */
 export async function handleUserRequest(message, providedTab = null) {
@@ -385,16 +391,29 @@ export async function handleUserRequest(message, providedTab = null) {
     return {
       ok: true,
       request,
-      ...result,
+      responseText: result.summary,
     };
   }
 
   // --- Preset: summarize ---
   if (message.payload.presetId === 'summarize') {
-    await sendToContentScript(tab.id, {
-      type: 'START_SUMMARIZE',
+    // Get page context (text and title)
+    const pageContextResult = await sendToContentScript(tab.id, {
+      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
     });
-    return { ok: true };
+    if (!pageContextResult?.ok) {
+      throw new Error(pageContextResult?.error || t('error.send_to_tab'));
+    }
+    const { text, title } = pageContextResult.context;
+    const summaryResult = await handleSummarize({ text, title });
+    if (!summaryResult.ok) {
+      throw new Error(summaryResult.error || 'Failed to summarize.');
+    }
+    return {
+      ok: true,
+      request,
+      responseText: summaryResult.summary,
+    };
   }
 
   // --- Other presets (simplify, translate) → simple transformations ---
@@ -406,5 +425,18 @@ export async function handleUserRequest(message, providedTab = null) {
     },
   });
 
-  return { ok: true, request };
+  // Generate a fixed response text for these presets
+  let responseText = '';
+  switch (message.payload.presetId) {
+    case 'simplify':
+      responseText = t('notification.simplified') || 'I have simplified the page by hiding non-essential elements.';
+      break;
+    case 'translate':
+      responseText = t('notification.translated') || 'I have translated the page to Spanish.';
+      break;
+    default:
+      responseText = t('popup.status.success') || 'Request applied.';
+  }
+
+  return { ok: true, request, responseText };
 }
