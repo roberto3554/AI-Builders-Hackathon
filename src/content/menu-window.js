@@ -87,7 +87,12 @@ function escapeHtml(value) {
 // DOM building – Main view
 // =============================================================================
 
-function buildMainView() {
+/**
+ * Builds the main view of the menu window.
+ *
+ * @returns {Promise<HTMLElement>} The main view container.
+ */
+async function buildMainView() {
   const container = document.createElement('div');
   container.className = 'page-adapter-main-view';
   container.style.display = 'block';
@@ -141,13 +146,39 @@ function buildMainView() {
   inputLabel.textContent = t('popup.write_need');
   inputSection.appendChild(inputLabel);
 
+  // The textarea and the send button share a relatively positioned wrapper
+  // so the button can be absolutely placed in the textarea's bottom-right
+  // corner. The textarea keeps additional bottom/right padding so text never
+  // runs underneath the button.
+  const textareaWrapper = document.createElement('div');
+  textareaWrapper.className = 'page-adapter-textarea-wrapper';
+
   const textarea = document.createElement('textarea');
   textarea.id = 'menu-request';
   textarea.className = 'page-adapter-menu-textarea';
   textarea.rows = 5;
   textarea.placeholder = t('popup.placeholder');
   textarea.maxLength = MAX_REQUEST_LENGTH;
-  inputSection.appendChild(textarea);
+  textareaWrapper.appendChild(textarea);
+
+  const adaptButton = document.createElement('button');
+  adaptButton.id = 'menu-adapt';
+  adaptButton.className = 'page-adapter-send-button';
+  adaptButton.type = 'button';
+  adaptButton.setAttribute('aria-label', t('popup.adapt_button'));
+  adaptButton.setAttribute('title', t('popup.adapt_button'));
+
+  const adaptIconUrl = chrome.runtime.getURL('src/assets/icons/arrow-up.svg');
+  try {
+    const svg = await fetchSvgContent(adaptIconUrl);
+    adaptButton.innerHTML = svg;
+  } catch {
+    // Fallback if the SVG asset cannot be loaded.
+    adaptButton.textContent = '↑';
+  }
+  textareaWrapper.appendChild(adaptButton);
+
+  inputSection.appendChild(textareaWrapper);
 
   const footer = document.createElement('div');
   footer.className = 'page-adapter-input-footer';
@@ -165,13 +196,6 @@ function buildMainView() {
   cancelButton.textContent = t('popup.cancel_button');
   cancelButton.hidden = true;
   footer.appendChild(cancelButton);
-
-  const adaptButton = document.createElement('button');
-  adaptButton.id = 'menu-adapt';
-  adaptButton.className = 'page-adapter-primary-button';
-  adaptButton.type = 'button';
-  adaptButton.textContent = t('popup.adapt_button');
-  footer.appendChild(adaptButton);
 
   inputSection.appendChild(footer);
   container.appendChild(inputSection);
@@ -274,7 +298,10 @@ function updatePopupTexts(container) {
     const textarea = mainView.querySelector('#menu-request');
     if (textarea) textarea.placeholder = t('popup.placeholder');
     const adaptButton = mainView.querySelector('#menu-adapt');
-    if (adaptButton) adaptButton.textContent = t('popup.adapt_button');
+    if (adaptButton) {
+      adaptButton.setAttribute('aria-label', t('popup.adapt_button'));
+      adaptButton.setAttribute('title', t('popup.adapt_button'));
+    }
     const cancelButton = mainView.querySelector('#menu-cancel');
     if (cancelButton) cancelButton.textContent = t('popup.cancel_button');
     const langLabel = mainView.querySelector('#language-label');
@@ -676,17 +703,10 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   updateCounter();
 
   textarea.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    adaptButton.click();
-  }
-  });
-
-  textarea.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    adaptButton.click();
-  }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      adaptButton.click();
+    }
   });
 
   adaptButton.addEventListener('click', () => {
@@ -848,8 +868,6 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   });
 
   showMainView(container);
-
-  
 }
 
 // =============================================================================
@@ -1015,7 +1033,7 @@ export async function createMenuWindow(floatingButton, shadowRoot) {
     container.style.height = '100%';
     container.style.position = 'relative';
 
-    const mainView = buildMainView();
+    const mainView = await buildMainView();
     const chatView = buildChatView();
     container.appendChild(mainView);
     container.appendChild(chatView);

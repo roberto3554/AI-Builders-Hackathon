@@ -867,6 +867,23 @@
   width: 16px;
 }
 
+/* ============================================================================
+   Prompt textarea wrapper
+   The textarea and its submit button share a relatively-positioned wrapper
+   so the button can be placed in the textarea's bottom-right corner while
+   remaining visually inside the input area. The textarea keeps extra
+   bottom/right padding to reserve room for the button.
+   ============================================================================ */
+.page-adapter-textarea-wrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.page-adapter-textarea-wrapper .page-adapter-menu-textarea {
+  padding: 12px 12px 56px 12px;
+}
+
 .page-adapter-menu-textarea {
   box-sizing: border-box;
   background: var(--pa-bg-input);
@@ -893,6 +910,70 @@
 .page-adapter-menu-textarea:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+}
+
+/* ============================================================================
+   Send button (circular, white arrow inside a blue circle).
+   Positioned inside the textarea's bottom-right corner via the wrapper.
+   ============================================================================ */
+.page-adapter-send-button {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pa-primary);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.15s ease;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.page-adapter-send-button:hover {
+  background: var(--pa-primary-hover);
+}
+
+.page-adapter-send-button:active {
+  transform: scale(0.94);
+}
+
+.page-adapter-send-button:disabled {
+  opacity: var(--pa-primary-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.page-adapter-send-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-send-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-send-button {
+  color: #000000;
+  border: 2px solid #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-send-button {
+    transition: none;
+  }
+  .page-adapter-send-button:active {
+    transform: none;
+  }
 }
 
 .page-adapter-input-footer {
