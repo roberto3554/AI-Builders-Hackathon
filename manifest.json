@@ -41,6 +41,7 @@
         "src/content/marked-loader.js",
         "src/content/floating-button.js",
         "src/content/menu-window.js",
+        "src/content/simplify-context.js",
         "src/content/content.css",
         "src/shared/constants.js",
         "src/shared/preferences.js",
