@@ -102,6 +102,17 @@ async function onRuntimeMessage(message, sender, sendResponse) {
         return true;
       }
 
+      case 'GET_SIMPLIFY_CANDIDATES': {
+        const { extractDomSnapshot } = await import('./page-context.js');
+        const { extractSimplifyCandidates } = await import('./simplify-context.js');
+        const snapshot = extractDomSnapshot();
+        sendResponse({
+          ok: true,
+          candidates: extractSimplifyCandidates(snapshot),
+        });
+        return true;
+      }
+
       case 'PING': {
         sendResponse({ ok: true });
         return;

@@ -4,11 +4,12 @@
  * Used by: content script for summarization, context, and DOM inspection.
  */
 
-const DEBUG = true; // Enable detailed logging
+const DEBUG = false;
 
-const MAX_SNAPSHOT_DEPTH = 20; // Increased to capture deeper nesting
-const MAX_CHILDREN_PER_NODE = 80; // Increased to include more children
+const MAX_SNAPSHOT_DEPTH = 60;
+const MAX_CHILDREN_PER_NODE = 200;
 const MAX_TEXT_LENGTH = 2000;
+const MAX_TOTAL_NODES = 12000;
 
 const nodeIdMap = new WeakMap();
 let nextNodeId = 1;
@@ -19,7 +20,6 @@ let nextNodeId = 1;
 
 /**
  * Parses a CSS color string (rgb/rgba) into an object with r, g, b, a.
- * Returns null if parsing fails.
  *
  * @param {string} colorStr - CSS color string.
  * @returns {{ r: number, g: number, b: number, a: number } | null}
@@ -60,7 +60,7 @@ function rgbToCSS(color) {
  * @returns {number} Luminance (0..1).
  */
 function luminance(r, g, b) {
-  const [R, G, B] = [r, g, b].map(c => {
+  const [R, G, B] = [r, g, b].map((c) => {
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
   });
@@ -98,8 +98,7 @@ function blendColors(fg, bg) {
 }
 
 /**
- * Determines the effective background color of an element by walking up the DOM
- * and finding the first opaque background, defaulting to white.
+ * Determines the effective background color of an element by walking up the DOM.
  *
  * @param {Element} element - Starting element.
  * @returns {string} CSS color string.
@@ -129,7 +128,7 @@ function getEffectiveBackgroundColor(element) {
     }
     current = current.parentElement;
   }
-  return '#ffffff'; // fallback
+  return '#ffffff';
 }
 
 // =============================================================================
@@ -194,29 +193,28 @@ export function findDomNodeById(nodeId) {
 
 /**
  * Checks whether an element is visually visible.
+ * Only `display: none` and `visibility: hidden` are treated as invisible,
+ * because temporary `opacity: 0` during animations should not remove an
+ * entire subtree from the snapshot.
  *
  * @param {Element} element - The element to inspect.
  * @returns {boolean} Whether the element is visible.
  */
 function isElementVisible(element) {
   const style = window.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 /**
  * Determines if a node should be included in the snapshot.
- * We include all visible nodes except extension-injected ones.
  *
  * @param {Element} element - The DOM element.
- * @param {string} text - The cleaned text content.
  * @returns {boolean} True if the node should be included.
  */
-function isRelevantNode(element, text) {
-  // Skip extension UI elements (any element inside a container with data-extension="true").
+function isRelevantNode(element) {
   if (element.closest('[data-extension="true"]')) {
     return false;
   }
-  // Skip the injection marker on the root element (just in case).
   if (element.dataset && element.dataset.pageAdapterInjected) {
     return false;
   }
@@ -224,7 +222,23 @@ function isRelevantNode(element, text) {
 }
 
 /**
- * Filters style properties to only those needed for accessibility and readability.
+ * Computes the direct text content of an element (text nodes only).
+ *
+ * @param {Element} element - The DOM element.
+ * @returns {string} The cleaned direct text.
+ */
+function getDirectText(element) {
+  let directText = '';
+  for (const childNode of element.childNodes) {
+    if (childNode.nodeType === Node.TEXT_NODE) {
+      directText += childNode.textContent;
+    }
+  }
+  return cleanText(directText);
+}
+
+/**
+ * Filters style properties to only those needed for accessibility.
  *
  * @param {CSSStyleDeclaration} computedStyle - The computed style object.
  * @returns {object} Filtered style object.
@@ -254,8 +268,7 @@ function getFilteredStyle(computedStyle) {
 }
 
 /**
- * Serializes a DOM element into a compact, structured snapshot node,
- * including computed accessibility metadata.
+ * Serializes a DOM element into a compact, structured snapshot node.
  *
  * @param {Element} element - The element to serialize.
  * @param {number} depth - Current traversal depth.
@@ -264,17 +277,20 @@ function getFilteredStyle(computedStyle) {
  * @returns {object | null} The serialized node or null when the element should be skipped.
  */
 function serializeElement(element, depth, parentEffectiveBackground, stats) {
-  console.log('[DEBUG] Procesando:', element.tagName, 'id:', element.id, 'depth:', depth);
-
+  if (stats.totalNodes >= MAX_TOTAL_NODES) {
+    return null;
+  }
   if (depth > MAX_SNAPSHOT_DEPTH || !isElementVisible(element)) {
     return null;
   }
 
+  stats.totalNodes++;
+
   const tagName = element.tagName.toLowerCase();
   const text = cleanText(element.innerText || element.textContent || '').slice(0, MAX_TEXT_LENGTH);
+  const directText = getDirectText(element);
 
-  const relevant = isRelevantNode(element, text);
-  if (!relevant) {
+  if (!isRelevantNode(element)) {
     const childNodes = [];
     const children = [...element.children].slice(0, MAX_CHILDREN_PER_NODE);
     for (const child of children) {
@@ -285,13 +301,14 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
     }
     if (childNodes.length > 0) {
       return {
+        accessibility: null,
+        attributes: null,
+        children: childNodes,
+        directText: null,
         id: getNodeId(element),
+        style: null,
         tagName,
         text: null,
-        attributes: null,
-        style: null,
-        accessibility: null,
-        children: childNodes,
       };
     }
     return null;
@@ -312,7 +329,21 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
       attributes.className = cleanText(attribute.value);
       continue;
     }
-    if (['id', 'role', 'href', 'src', 'alt', 'title', 'name', 'type', 'value', 'placeholder', 'aria-label'].includes(attribute.name)) {
+    if (
+      [
+        'id',
+        'role',
+        'href',
+        'src',
+        'alt',
+        'title',
+        'name',
+        'type',
+        'value',
+        'placeholder',
+        'aria-label',
+      ].includes(attribute.name)
+    ) {
       attributes[attribute.name] = attribute.value;
     }
   }
@@ -336,12 +367,11 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
     }
   }
 
-  // Accessibility classification with fixed threshold 4.5 for all texts
   let accessibility = {
-    effectiveBackground: effectiveBg,
-    contrastRatio: null,
-    isLargeText: false,
     classification: 'NOT_APPLICABLE',
+    contrastRatio: null,
+    effectiveBackground: effectiveBg,
+    isLargeText: false,
   };
 
   const hasText = text.length > 0;
@@ -353,26 +383,20 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
     let classification = 'UNRESOLVED';
     if (fgObj && bgObj) {
       ratio = contrastRatio(fgObj, bgObj);
-      const threshold = 4.5; // Fixed threshold for all text
+      const threshold = 4.5;
       classification = ratio >= threshold ? 'PASS' : 'FAIL';
     }
     accessibility = {
-      effectiveBackground: effectiveBg,
-      contrastRatio: ratio,
-      isLargeText: false,
       classification,
+      contrastRatio: ratio,
+      effectiveBackground: effectiveBg,
+      isLargeText: false,
     };
 
     if (classification === 'FAIL') {
       stats.failingNodeCount++;
-      if (DEBUG) {
-        console.log(`[page-context] FAIL: ${getNodeId(element)} (${tagName}) text: "${text.slice(0, 30)}" ratio: ${ratio}`);
-      }
     } else if (classification === 'PASS') {
       stats.passingNodeCount++;
-      if (DEBUG) {
-        console.log(`[page-context] PASS: ${getNodeId(element)} (${tagName}) text: "${text.slice(0, 30)}" ratio: ${ratio}`);
-      }
     } else {
       stats.unresolvedCount++;
     }
@@ -392,13 +416,14 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
   const filteredStyle = getFilteredStyle(computedStyle);
 
   return {
+    accessibility,
+    attributes: Object.keys(attributes).length > 0 ? attributes : null,
+    children: childNodes,
+    directText: directText || null,
     id: getNodeId(element),
+    style: filteredStyle,
     tagName,
     text: text || null,
-    attributes: Object.keys(attributes).length > 0 ? attributes : null,
-    style: filteredStyle,
-    accessibility,
-    children: childNodes,
   };
 }
 
@@ -408,13 +433,23 @@ function serializeElement(element, depth, parentEffectiveBackground, stats) {
  * @param {Element} element - The element to serialize.
  * @param {number} [depth=0] - The current recursion depth.
  * @param {string} [parentEffectiveBackground='#ffffff'] - Parent effective background.
- * @param {object} stats - Statistics collector.
+ * @param {object|null} [stats=null] - Statistics collector.
  * @returns {object | null} The serialized subtree, if visible.
  */
-export function serializeDomNode(element, depth = 0, parentEffectiveBackground = '#ffffff', stats = null) {
-  const localStats = stats || { relevantNodeCount: 0, failingNodeCount: 0, passingNodeCount: 0, unresolvedCount: 0 };
-  const result = serializeElement(element, depth, parentEffectiveBackground, localStats);
-  return result;
+export function serializeDomNode(
+  element,
+  depth = 0,
+  parentEffectiveBackground = '#ffffff',
+  stats = null
+) {
+  const localStats = stats || {
+    failingNodeCount: 0,
+    passingNodeCount: 0,
+    relevantNodeCount: 0,
+    totalNodes: 0,
+    unresolvedCount: 0,
+  };
+  return serializeElement(element, depth, parentEffectiveBackground, localStats);
 }
 
 /**
@@ -436,11 +471,11 @@ export function extractPageContext() {
     .map((element) => cleanText(element.innerText))
     .filter(Boolean);
   return {
+    headings,
+    language: document.documentElement.lang || null,
+    text: text.slice(0, 30000),
     title,
     url,
-    language: document.documentElement.lang || null,
-    headings,
-    text: text.slice(0, 30000),
   };
 }
 
@@ -465,16 +500,20 @@ function collectAccessibilityIssues(node, issues) {
 /**
  * Extracts a structured DOM snapshot for tool-driven page adaptation,
  * augmented with accessibility metadata, a list of contrast issues, and statistics.
- * Uses the entire page body as root, excluding only extension-injected elements.
  *
  * @returns {object} A compact snapshot of the visible page structure.
  */
 export function extractDomSnapshot() {
-  // Always use document.body to capture the entire page
   const rootElement = document.body;
 
   const rootEffectiveBg = getEffectiveBackgroundColor(rootElement);
-  const stats = { relevantNodeCount: 0, failingNodeCount: 0, passingNodeCount: 0, unresolvedCount: 0 };
+  const stats = {
+    failingNodeCount: 0,
+    passingNodeCount: 0,
+    relevantNodeCount: 0,
+    totalNodes: 0,
+    unresolvedCount: 0,
+  };
 
   const serializedRoot = rootElement
     ? serializeElement(rootElement, 0, rootEffectiveBg, stats)
@@ -487,20 +526,22 @@ export function extractDomSnapshot() {
   const coverage = relevant > 0 ? (passing / relevant) * 100 : 0;
 
   const snapshot = {
-    title: document.title,
-    url: location.href,
+    accessibilityIssues: [],
     language: document.documentElement.lang || null,
-    viewport: {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    },
     root: serializedRoot,
     snapshotStats: {
-      relevantNodeCount: relevant,
+      coveragePercentage: coverage,
       failingNodeCount: failing,
       passingNodeCount: passing,
+      relevantNodeCount: relevant,
+      totalNodes: stats.totalNodes,
       unresolvedCount: unresolved,
-      coveragePercentage: coverage,
+    },
+    title: document.title,
+    url: location.href,
+    viewport: {
+      height: window.innerHeight,
+      width: window.innerWidth,
     },
   };
 
@@ -509,8 +550,10 @@ export function extractDomSnapshot() {
   snapshot.accessibilityIssues = issues;
 
   if (DEBUG) {
-    console.log(`[page-context] Snapshot stats: relevant=${relevant}, failing=${failing}, passing=${passing}, unresolved=${unresolved}`);
-    console.log(`[page-context] Accessibility issues (FAIL): ${issues.length} nodes`);
+    console.debug(
+      `[page-context] Snapshot stats: total=${stats.totalNodes}, relevant=${relevant}, ` +
+        `failing=${failing}, passing=${passing}, unresolved=${unresolved}`
+    );
   }
 
   return snapshot;

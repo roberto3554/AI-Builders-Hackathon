@@ -82,4 +82,11 @@ export default {
   'error.dom_adaptation_generic': 'Failed to adapt the page: {{message}}',
   'error.chat_generic': 'Failed to answer question: {{message}}',
   'error.send_to_tab': 'Unable to interact with this page. Try a normal webpage and reload after installing the extension.',
+
+  // ===========================================================================
+  // Content – Simplify
+  // ===========================================================================
+  'simplify.summary_hidden': 'Simplified the page by hiding {{count}} non-essential element(s).',
+  'simplify.summary_updated': 'Simplified the page by hiding {{hidden}} element(s) and shortening {{summarized}} element(s).',
+  'simplify.no_changes': 'No changes were needed.',
 };

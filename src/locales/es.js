@@ -82,4 +82,11 @@ export default {
   'error.dom_adaptation_generic': 'Error al adaptar la página: {{message}}',
   'error.chat_generic': 'Error al responder la pregunta: {{message}}',
   'error.send_to_tab': 'No se puede interactuar con esta página. Prueba con una página web normal y recarga después de instalar la extensión.',
+
+  // ===========================================================================
+  // Content – Simplify
+  // ===========================================================================
+  'simplify.summary_hidden': 'Página simplificada ocultando {{count}} elemento(s) no esencial(es).',
+  'simplify.summary_updated': 'Página simplificada ocultando {{hidden}} elemento(s) y acortando {{summarized}} elemento(s).',
+  'simplify.no_changes': 'No fue necesario ningún cambio.',
 };

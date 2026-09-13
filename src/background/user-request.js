@@ -1,7 +1,7 @@
 /**
  * @fileoverview Handles user requests from popup or context menu.
  * Orchestrates tab retrieval, injection, and delegation to content script.
- * Dependencies: injection.js, shared/constants.js, shared/locale.js.
+ * Dependencies: injection.js, shared/constants.js, shared/locale.js, simplify.js.
  * Used by: message-handler.js, context-menu.js.
  */
 
@@ -17,6 +17,7 @@ import {
   MAX_DOM_ADAPTATION_STEPS,
   handleSummarize,
 } from './ollama.js';
+import { performSimplify } from './simplify.js';
 
 const STORAGE_KEY = 'pageAdapter:lastRequest';
 const DEBUG = true;
@@ -395,6 +396,23 @@ export async function handleUserRequest(message, providedTab = null) {
     };
   }
 
+  // --- Preset: simplify → LLM-driven node classification ---
+  if (message.payload.mode === 'preset' && message.payload.presetId === 'simplify') {
+    const pageContextResult = await sendToContentScript(tab.id, {
+      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
+    });
+    if (!pageContextResult?.ok) {
+      throw new Error(pageContextResult?.error || t('error.send_to_tab'));
+    }
+
+    const result = await performSimplify(tab.id, pageContextResult);
+    return {
+      ok: true,
+      request,
+      responseText: result.summary,
+    };
+  }
+
   // --- Preset: summarize ---
   if (message.payload.presetId === 'summarize') {
     // Get page context (text and title)
@@ -416,7 +434,7 @@ export async function handleUserRequest(message, providedTab = null) {
     };
   }
 
-  // --- Other presets (simplify, translate) → simple transformations ---
+  // --- Other presets (translate) → simple transformations ---
   await sendToContentScript(tab.id, {
     type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
     payload: {
@@ -428,9 +446,6 @@ export async function handleUserRequest(message, providedTab = null) {
   // Generate a fixed response text for these presets
   let responseText = '';
   switch (message.payload.presetId) {
-    case 'simplify':
-      responseText = t('notification.simplified') || 'I have simplified the page by hiding non-essential elements.';
-      break;
     case 'translate':
       responseText = t('notification.translated') || 'I have translated the page to Spanish.';
       break;
