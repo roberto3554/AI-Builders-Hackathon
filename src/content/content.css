@@ -538,6 +538,149 @@
 }
 
 /* ============================================================================
+   Quick-action menu (expanded from the floating button)
+   ============================================================================ */
+.page-adapter-quick-menu {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--pa-spacing-sm);
+  width: 48px;
+  overflow: visible;
+}
+
+.page-adapter-quick-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 48px;
+  min-width: 48px;
+  padding: 0 11px;
+  border: 2px solid var(--pa-border-color);
+  border-radius: 999px;
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  cursor: pointer;
+  box-shadow: var(--pa-shadow-panel);
+  box-sizing: border-box;
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* The animation-delay is assigned per item from JavaScript so the
+     menu opens as a top-to-bottom cascade. */
+  animation: page-adapter-quick-menu-item-in 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.page-adapter-quick-menu-button:hover {
+  background: var(--pa-bg-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.page-adapter-quick-menu-button:focus-visible {
+  outline: 3px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-quick-menu-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.page-adapter-quick-menu-button__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.page-adapter-quick-menu-button__label {
+  display: inline-block;
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: var(--pa-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    max-width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.2s ease,
+    margin-left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.page-adapter-quick-menu-button:hover .page-adapter-quick-menu-button__label,
+.page-adapter-quick-menu-button:focus-visible .page-adapter-quick-menu-button__label {
+  max-width: 240px;
+  margin-left: 10px;
+  opacity: 1;
+}
+
+.page-adapter-quick-menu-button--arrow {
+  border-color: var(--pa-primary);
+  color: var(--pa-primary);
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-quick-menu-button {
+  border-width: 3px;
+  box-shadow: none;
+}
+
+/* Closing state — set from JavaScript right before the menu is removed.
+   The per-item animation-delay is reassigned from JS in reverse order so
+   the cascade collapses bottom-to-top, mirroring the opening. */
+.page-adapter-quick-menu--closing .page-adapter-quick-menu-button {
+  animation: page-adapter-quick-menu-item-out 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  pointer-events: none;
+}
+
+@keyframes page-adapter-quick-menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes page-adapter-quick-menu-item-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-quick-menu-button,
+  .page-adapter-quick-menu--closing .page-adapter-quick-menu-button {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .page-adapter-quick-menu-button__label {
+    transition: none;
+  }
+}
+
+/* ============================================================================
    Menu window specific styles
    ============================================================================ */
 
