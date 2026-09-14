@@ -466,7 +466,9 @@ function getFailingNodesDescription(nodeIds, snapshot) {
  * @param {object} plan - Parsed plan from model.
  * @param {object} snapshot - The DOM snapshot.
  * @returns {object} Normalized plan with validated actions.
- * @throws Will throw with a detailed error if validation fails for structural reasons.
+ * @throws Will throw with a detailed error if validation fails for structural
+ *   reasons, or if the model returned actions but none of them passed
+ *   validation (which signals a malformed response that should be retried).
  */
 function validateAndNormalizePlan(plan, snapshot) {
   if (!plan || typeof plan !== 'object') {
@@ -495,12 +497,14 @@ function validateAndNormalizePlan(plan, snapshot) {
     normalizedActions.push(action);
   }
 
+  // If the model produced actions but none survived validation, fail loudly so
+  // the retry loop in handleDomAdaptation can reissue the prompt with the
+  // previous error appended. Silently returning an empty plan hides the
+  // problem and forces an unnecessary fallback.
   if (normalizedActions.length === 0 && plan.actions.length > 0) {
-    return {
-      actions: [],
-      complete: false,
-      summary: '',
-    };
+    throw new Error(
+      `All ${plan.actions.length} action(s) returned by the model failed validation.`
+    );
   }
 
   const conflicts = detectConflicts(normalizedActions);
@@ -516,13 +520,92 @@ function validateAndNormalizePlan(plan, snapshot) {
 }
 
 // =============================================================================
-// Build DOM adaptation prompt (lightweight for high-contrast)
+// DOM adaptation prompts
 // =============================================================================
+
+/**
+ * Builds the high-contrast adaptation prompt.
+ *
+ * The prompt lists each failing node and spells out the exact JSON shape of
+ * every action, including the required "nodeId" field. Without this schema,
+ * smaller models tend to omit "nodeId", which then fails validation and
+ * silently produces an empty plan.
+ *
+ * @param {object} params - Prompt parameters.
+ * @param {string} params.request - The user request text.
+ * @param {object} params.pageContext - The page context (context + snapshot).
+ * @param {number} params.iteration - Current iteration number.
+ * @param {boolean} params.hasPreviousActions - Whether actions were already applied.
+ * @param {string} params.previousActionsSummary - Summary of previously applied actions.
+ * @param {Array<string>} params.failingNodeIds - Node IDs with failing contrast.
+ * @returns {string} The formatted prompt.
+ */
+function buildHighContrastPrompt({
+  request,
+  pageContext,
+  iteration,
+  hasPreviousActions,
+  previousActionsSummary,
+  failingNodeIds = [],
+}) {
+  const failingDetails =
+    failingNodeIds.length > 0
+      ? getFailingNodesDescription(failingNodeIds, pageContext.snapshot)
+      : 'None (all nodes have good contrast)';
+
+  const lines = [
+    `User request: ${request}`,
+    `Iteration: ${iteration}`,
+    '',
+    'Task: fix low-contrast text on the page by adjusting foreground and',
+    'background colors on the listed nodes.',
+    '',
+    'Failing nodes:',
+    failingDetails,
+    '',
+    'Return only valid JSON with this exact shape:',
+    '{',
+    '  "complete": boolean,',
+    '  "summary": string,',
+    '  "actions": [',
+    '    {',
+    '      "action": "set_style",',
+    '      "nodeId": "page-adapter-node-5",',
+    '      "style": { "color": "#ffffff", "backgroundColor": "#000000" }',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- Every action must include "action", "nodeId", and "style".',
+    '- "action" must be exactly "set_style".',
+    '- "nodeId" must be copied verbatim from the failing nodes list above.',
+    '- "style" must include both "color" and "backgroundColor".',
+    '- Choose colors that achieve at least a 4.5:1 contrast ratio.',
+    '- Set "complete": true only when every failing node has been addressed.',
+    '- Do not include markdown, commentary, or text outside the JSON object.',
+  ];
+
+  if (hasPreviousActions && previousActionsSummary) {
+    lines.push('');
+    lines.push('Previous changes already applied:');
+    lines.push(previousActionsSummary);
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Builds the DOM adaptation prompt.
  *
  * @param {object} params - Prompt parameters.
+ * @param {string} params.request - The user request text.
+ * @param {object} params.pageContext - The page context (context + snapshot).
+ * @param {number} params.iteration - Current iteration number.
+ * @param {string|null} params.presetId - Preset identifier, if any.
+ * @param {boolean} params.hasPreviousActions - Whether actions were already applied.
+ * @param {string} params.previousActionsSummary - Summary of previously applied actions.
+ * @param {Array<string>} params.failingNodeIds - Node IDs with failing contrast.
  * @returns {string} The formatted prompt.
  */
 function buildDomAdaptationPrompt({
@@ -535,32 +618,14 @@ function buildDomAdaptationPrompt({
   failingNodeIds = [],
 }) {
   if (presetId === 'high_contrast') {
-    const failingDetails =
-      failingNodeIds.length > 0
-        ? getFailingNodesDescription(failingNodeIds, pageContext.snapshot)
-        : 'None (all nodes have good contrast)';
-
-    const promptLines = [
-      `User request: ${request}`,
-      `Iteration: ${iteration}`,
-      '',
-      'You are given a list of DOM nodes that have low contrast (FAIL).',
-      'For each node, suggest style changes to fix contrast issues.',
-      'Use only the node IDs provided.',
-      'Return a JSON object with "actions" array.',
-      '',
-      'Failing nodes:',
-      failingDetails,
-      '',
-      'If you fix all failing nodes, set "complete": true. Otherwise, set "complete": false.',
-      'Do not include markdown or extra text outside JSON.',
-    ];
-
-    if (hasPreviousActions && previousActionsSummary) {
-      promptLines.push('Previous changes:', previousActionsSummary);
-    }
-
-    return promptLines.join('\n');
+    return buildHighContrastPrompt({
+      request,
+      pageContext,
+      iteration,
+      hasPreviousActions,
+      previousActionsSummary,
+      failingNodeIds,
+    });
   }
 
   const snapshotText = JSON.stringify(pageContext.snapshot).slice(0, 40000);
@@ -657,6 +722,7 @@ export async function handleDomAdaptation({
     'For high-contrast requests, ensure you change both background and text colors, and do not consider the task complete until you have made at least two complementary changes.',
     'Critically evaluate the current snapshot: if any text is unreadable due to poor contrast, generate more actions to fix it.',
     'If you are given a list of failing nodes, focus your actions on those nodes.',
+    'Every action must include the required fields declared in the requested JSON shape, in particular "action" and "nodeId".',
     'Do not produce internal reasoning. Output JSON directly.',
   ].join(' ');
 
