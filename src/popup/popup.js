@@ -51,6 +51,21 @@ function applyTheme(theme) {
   // 'system' → no class, media query prevails
 }
 
+/**
+ * Applies the selected font size to the popup body. The corresponding body
+ * class overrides the `--font-scale` custom property, which is consumed by
+ * every `font-size` declaration in popup.css.
+ *
+ * @param {string} fontSize - 'small', 'medium', or 'large'.
+ */
+function applyFontSize(fontSize) {
+  document.body.classList.remove('font-small', 'font-medium', 'font-large');
+  const safeSize = ['small', 'medium', 'large'].includes(fontSize)
+    ? fontSize
+    : 'medium';
+  document.body.classList.add(`font-${safeSize}`);
+}
+
 // =============================================================================
 // Initialization
 // =============================================================================
@@ -58,5 +73,6 @@ function applyTheme(theme) {
 (async function init() {
   const prefs = await loadPreferences();
   applyTheme(prefs.theme);
+  applyFontSize(prefs.fontSize);
   applyLocale(prefs.locale);
 })();

@@ -2,6 +2,11 @@
  * @fileoverview Styles for the Page Adapter content script UI.
  * All styles are scoped to the shadow root via :host and :host-context.
  * Theming via CSS variables, supports light/dark and high contrast.
+ *
+ * Font scaling is driven by the `--pa-font-scale` custom property, which is
+ * set on the shadow host by JS (`applyFontSize`). All text sizes in the
+ * extension are expressed as `calc(<base>px * var(--pa-font-scale))` so that
+ * changing the scale propagates uniformly through every UI element.
  */
 
 /* ============================================================================
@@ -22,13 +27,16 @@
   --pa-primary: #2563eb;
   --pa-primary-hover: #1d4ed8;
   --pa-primary-disabled-opacity: 0.55;
+  --pa-danger: #dc2626;
+  --pa-danger-hover: #b91c1c;
   --pa-radius-sm: 8px;
   --pa-radius-md: 10px;
   --pa-radius-lg: 16px;
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
   --pa-shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
   --pa-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --pa-font-size-base: 14px;
+  --pa-font-scale: 1;
+  --pa-font-size-base: calc(14px * var(--pa-font-scale));
   --pa-spacing-xs: 4px;
   --pa-spacing-sm: 8px;
   --pa-spacing-md: 12px;
@@ -36,13 +44,14 @@
   --pa-spacing-xl: 20px;
   --pa-spacing-2xl: 24px;
   --font-size-base: 1rem;
+
   display: block;
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
   color: var(--pa-text-primary);
   line-height: 1.5;
-  all: initial; /* reset inherited styles */
-  display: block; /* reapply block display */
+  all: initial;
+  display: block;
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
   color: var(--pa-text-primary);
@@ -66,6 +75,8 @@
   --pa-border-focus: #60a5fa;
   --pa-primary: #3b82f6;
   --pa-primary-hover: #2563eb;
+  --pa-danger: #f87171;
+  --pa-danger-hover: #ef4444;
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
 }
 
@@ -86,7 +97,25 @@
   --pa-border-focus: #ffff00;
   --pa-primary: #ffff00;
   --pa-primary-hover: #ffff00;
+  --pa-danger: #ff8080;
+  --pa-danger-hover: #ffb0b0;
   --pa-shadow-panel: none;
+}
+
+/* ============================================================================
+   Font size (via host class)
+   The scale factor multiplies every text size in the extension. Small and
+   large are chosen to remain clearly readable while still being noticeably
+   distinct from the medium default.
+   ============================================================================ */
+:host-context(.page-adapter-font-small) {
+  --pa-font-scale: 0.85;
+}
+:host-context(.page-adapter-font-medium) {
+  --pa-font-scale: 1;
+}
+:host-context(.page-adapter-font-large) {
+  --pa-font-scale: 1.15;
 }
 
 /* ============================================================================
@@ -146,44 +175,16 @@
   justify-content: space-between;
   gap: var(--pa-spacing-md);
   margin-bottom: var(--pa-spacing-lg);
-  font-size: 16px;
-}
-
-.page-adapter-close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--pa-radius-sm);
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.page-adapter-close:hover {
-  background: var(--pa-border-color);
-}
-
-.page-adapter-close:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
+  font-size: calc(16px * var(--pa-font-scale));
 }
 
 /* ============================================================================
    Status, labels, request display
    ============================================================================ */
-.page-adapter-status {
-  margin-bottom: var(--pa-spacing-lg);
-  color: var(--pa-primary);
-  font-weight: 600;
-}
-
 .page-adapter-label {
   margin-bottom: var(--pa-spacing-sm);
   color: var(--pa-text-secondary);
-  font-size: 12px;
+  font-size: calc(13px * var(--pa-font-scale));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -194,6 +195,7 @@
   border-radius: var(--pa-radius-md);
   background: var(--pa-bg-subtle);
   color: var(--pa-text-primary);
+  font-size: calc(15px * var(--pa-font-scale));
 }
 
 .page-adapter-info {
@@ -202,7 +204,7 @@
   gap: var(--pa-spacing-sm);
   margin-top: var(--pa-spacing-lg);
   color: var(--pa-text-secondary);
-  font-size: 12px;
+  font-size: calc(13px * var(--pa-font-scale));
 }
 
 .page-adapter-dot {
@@ -218,28 +220,24 @@
   overflow: hidden;
   margin-top: var(--pa-spacing-lg);
   color: var(--pa-text-muted);
-  font-size: 11px;
+  font-size: calc(12px * var(--pa-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* ============================================================================
-   Chat messages container
+   Chat messages
    ============================================================================ */
 .page-adapter-chat-messages {
-  max-height: 300px;
-  overflow-y: auto;
-  padding: var(--pa-spacing-sm);
+  padding: var(--pa-spacing-md);
   background: var(--pa-bg-subtle);
-  border-radius: var(--pa-radius-sm);
+  border-radius: var(--pa-radius-md);
   border: 1px solid var(--pa-border-color);
   display: flex;
   flex-direction: column;
   gap: var(--pa-spacing-sm);
-  margin-bottom: var(--pa-spacing-md);
 }
 
-/* Individual chat message */
 .page-adapter-chat-message {
   display: flex;
   margin-bottom: var(--pa-spacing-xs);
@@ -255,25 +253,28 @@
 
 .page-adapter-chat-bubble {
   max-width: 80%;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  padding: 10px 14px;
   border-radius: var(--pa-radius-md);
   word-wrap: break-word;
   background: var(--pa-border-color);
   color: var(--pa-text-primary);
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.55;
 }
 
 .page-adapter-chat-message.user .page-adapter-chat-bubble {
   background: var(--pa-primary);
   color: var(--pa-text-light);
+  border-bottom-right-radius: 4px;
 }
 
 .page-adapter-chat-message.assistant .page-adapter-chat-bubble {
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
   border: 1px solid var(--pa-border-color);
+  border-bottom-left-radius: 4px;
 }
 
-/* Markdown content inside chat bubbles */
 .page-adapter-chat-bubble p {
   margin: 0 0 var(--pa-spacing-sm) 0;
 }
@@ -290,6 +291,7 @@
   padding: 2px 4px;
   border-radius: var(--pa-radius-sm);
   font-family: monospace;
+  font-size: 0.92em;
 }
 .page-adapter-chat-bubble pre {
   background: #1e293b;
@@ -304,21 +306,27 @@
    ============================================================================ */
 .page-adapter-chat-input-area {
   display: flex;
+  align-items: center;
   gap: var(--pa-spacing-sm);
-  padding-top: var(--pa-spacing-sm);
-  border-top: 1px solid var(--pa-border-color);
-  margin-top: var(--pa-spacing-sm);
 }
 
 .page-adapter-chat-input {
   flex: 1;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  min-width: 0;
+  padding: 11px 14px;
   border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-sm);
+  border-radius: var(--pa-radius-md);
   outline: none;
-  font-size: var(--pa-font-size-base);
+  font-family: inherit;
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.4;
   background: var(--pa-bg-input);
   color: var(--pa-text-primary);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-chat-input::placeholder {
+  color: var(--pa-text-muted);
 }
 
 .page-adapter-chat-input:focus {
@@ -331,29 +339,95 @@
   cursor: not-allowed;
 }
 
-.page-adapter-chat-send {
-  padding: var(--pa-spacing-sm) var(--pa-spacing-lg);
+/* ---------------------------------------------------------------------------
+   Circular action buttons in the chat input area.
+   The send button and the stop button share the same shape, size, and
+   primary-blue background so they read as a matched pair: the send button
+   shows an upward arrow, the stop button shows a filled square. Only one
+   of them is visible at a time.
+   --------------------------------------------------------------------------- */
+.page-adapter-chat-send,
+.page-adapter-chat-stop {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: var(--pa-primary);
-  color: var(--pa-text-light);
-  border: none;
-  border-radius: var(--pa-radius-sm);
+  color: #ffffff;
   cursor: pointer;
-  font-weight: 600;
-  font-size: var(--pa-font-size-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--pa-primary) 45%, transparent);
+  transition:
+    background 150ms ease,
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
-.page-adapter-chat-send:hover {
+.page-adapter-chat-send[hidden],
+.page-adapter-chat-stop[hidden] {
+  display: none;
+}
+
+.page-adapter-chat-send:hover,
+.page-adapter-chat-stop:hover {
   background: var(--pa-primary-hover);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--pa-primary) 55%, transparent);
 }
 
-.page-adapter-chat-send:disabled {
+.page-adapter-chat-send:active,
+.page-adapter-chat-stop:active {
+  transform: scale(0.94);
+}
+
+.page-adapter-chat-send:disabled,
+.page-adapter-chat-stop:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-.page-adapter-chat-send:focus-visible {
+.page-adapter-chat-send:focus-visible,
+.page-adapter-chat-stop:focus-visible {
   outline: 2px solid var(--pa-border-focus);
   outline-offset: 2px;
+}
+
+.page-adapter-chat-send svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-chat-stop svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: currentColor;
+  stroke: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-chat-send,
+:host-context(.page-adapter-high-contrast) .page-adapter-chat-stop {
+  color: #000000;
+  border: 2px solid #ffffff;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-chat-send,
+  .page-adapter-chat-stop {
+    transition: none;
+  }
+  .page-adapter-chat-send:active,
+  .page-adapter-chat-stop:active {
+    transform: none;
+  }
 }
 
 /* ============================================================================
@@ -367,6 +441,7 @@
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
   background: var(--pa-bg-surface);
+  border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-lg);
   box-shadow: var(--pa-shadow-panel);
   overflow: hidden;
@@ -374,27 +449,10 @@
   min-height: 200px;
 }
 
-.page-adapter-floating-window .page-adapter-title-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
-  background: var(--pa-bg-subtle);
-  cursor: move;
-  border-bottom: 1px solid var(--pa-border-color);
-  flex-shrink: 0;
-}
-
-.page-adapter-floating-window .page-adapter-title-text {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--pa-text-primary);
-}
-
 .page-adapter-floating-window .page-adapter-content-area {
   flex: 1;
   overflow-y: auto;
-  padding: var(--pa-spacing-lg);
+  padding: 0;
   background: var(--pa-bg-surface);
 }
 
@@ -433,7 +491,7 @@
   float: right;
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: calc(24px * var(--pa-font-scale));
   cursor: pointer;
   color: var(--pa-text-secondary);
 }
@@ -456,7 +514,7 @@
   border-radius: var(--pa-radius-sm);
   z-index: 999999;
   font-family: var(--pa-font-family);
-  font-size: var(--pa-font-size-base);
+  font-size: calc(14px * var(--pa-font-scale));
   box-shadow: var(--pa-shadow-panel);
   border: 1px solid var(--pa-border-color);
   pointer-events: none;
@@ -483,18 +541,13 @@
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
   box-shadow: var(--pa-shadow-panel);
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   padding: 0;
-  cursor: grab;
-  user-select: none;
-}
-
-#extension-floating-button:hover {
-  cursor: grab;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 #extension-floating-button:active {
@@ -519,7 +572,6 @@
   stroke: currentColor;
 }
 
-/* High contrast adjustments */
 :host-context(.page-adapter-high-contrast) #extension-floating-button {
   border-width: 3px;
   background: var(--pa-bg-surface);
@@ -527,7 +579,6 @@
   box-shadow: none;
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   #extension-floating-button {
     transition: none;
@@ -567,8 +618,6 @@
   box-sizing: border-box;
   white-space: nowrap;
   flex-shrink: 0;
-  /* The animation-delay is assigned per item from JavaScript so the
-     menu opens as a top-to-bottom cascade. */
   animation: page-adapter-quick-menu-item-in 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   transition:
     background 0.15s ease,
@@ -611,7 +660,7 @@
   overflow: hidden;
   opacity: 0;
   color: var(--pa-text-primary);
-  font-size: 16px;
+  font-size: calc(16px * var(--pa-font-scale));
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -638,34 +687,19 @@
   box-shadow: none;
 }
 
-/* Closing state — set from JavaScript right before the menu is removed.
-   The per-item animation-delay is reassigned from JS in reverse order so
-   the cascade collapses bottom-to-top, mirroring the opening. */
 .page-adapter-quick-menu--closing .page-adapter-quick-menu-button {
   animation: page-adapter-quick-menu-item-out 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   pointer-events: none;
 }
 
 @keyframes page-adapter-quick-menu-item-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.92);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(-6px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes page-adapter-quick-menu-item-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.92);
-  }
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(0.92); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -681,13 +715,107 @@
 }
 
 /* ============================================================================
-   Menu window specific styles
+   Menu window – title bar
    ============================================================================ */
+.page-adapter-title-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-xs);
+  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
+  background: var(--pa-bg-surface);
+  border-bottom: 1px solid var(--pa-border-color);
+  cursor: move;
+  flex-shrink: 0;
+}
 
+.page-adapter-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pa-text-primary);
+  font-size: calc(16px * var(--pa-font-scale));
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Circular ghost buttons used in the title bar */
+.page-adapter-back-button,
+.page-adapter-settings-toggle,
+.page-adapter-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.page-adapter-back-button:hover,
+.page-adapter-settings-toggle:hover,
+.page-adapter-close:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-back-button:focus-visible,
+.page-adapter-settings-toggle:focus-visible,
+.page-adapter-close:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-back-button svg,
+.page-adapter-settings-toggle svg,
+.page-adapter-close svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+.page-adapter-back-button svg {
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-close svg {
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-settings-toggle svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.page-adapter-floating-window *,
+.page-adapter-floating-window *::before,
+.page-adapter-floating-window *::after {
+  box-sizing: border-box;
+}
+
+/* Back button is hidden by default; shown in chat view via JS. */
+.page-adapter-back-button {
+  display: none;
+}
+
+/* ============================================================================
+   Menu window – content layout
+   ============================================================================ */
 .page-adapter-menu-container {
   display: flex;
   flex-direction: column;
-  gap: var(--pa-spacing-lg);
+  gap: var(--pa-spacing-xl);
+  padding: var(--pa-spacing-2xl);
 }
 
 .page-adapter-menu-header {
@@ -695,185 +823,264 @@
 }
 
 .page-adapter-menu-header-row {
-  align-items: flex-start;
   display: flex;
-  gap: var(--pa-spacing-md);
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--pa-spacing-md);
 }
 
 .page-adapter-menu-title-group {
   min-width: 0;
 }
 
-.page-adapter-settings-toggle {
-  align-items: center;
-  background: var(--pa-bg-subtle);
-  border: 1px solid var(--pa-border-color);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  display: grid;
-  height: 32px;
-  place-items: center;
-  width: 32px;
-  flex: 0 0 auto;
-}
-
-.page-adapter-menu-subtitle {
-  color: var(--pa-text-secondary);
-  font-size: 16px;
-}
-
-.page-adapter-settings-toggle:hover {
-  background: var(--pa-border-color);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-settings-toggle:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-settings-toggle svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-}
-
-.page-adapter-settings-panel {
-  background: var(--pa-bg-elevated);
-  border: 1px solid var(--pa-border-color);
-  border-radius: var(--pa-radius-md);
-  box-shadow: var(--pa-shadow-panel);
-  margin-top: calc(var(--pa-spacing-sm) * -1);
-  padding: var(--pa-spacing-md);
-}
-
-.page-adapter-settings-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pa-spacing-sm);
-}
-
 .page-adapter-menu-header h1 {
-  font-size: 22px;
-  line-height: 1.2;
-  margin: 0 0 var(--pa-spacing-sm);
+  margin: 0 0 var(--pa-spacing-xs);
   color: var(--pa-text-primary);
+  font-size: calc(21px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
-.page-adapter-menu-header p {
-  color: var(--pa-text-secondary);
-  font-size: 14px;
+.page-adapter-menu-header p,
+.page-adapter-menu-subtitle {
   margin: 0;
-}
-
-.page-adapter-menu-section h2 {
   color: var(--pa-text-secondary);
-  font-size: 16px;
-  margin: 0 0 var(--pa-spacing-md);
+  font-size: calc(14px * var(--pa-font-scale));
+  line-height: 1.5;
 }
 
+/* ============================================================================
+   Menu window – section headers
+   ============================================================================ */
+.page-adapter-menu-section h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-sm);
+  margin: 0 0 var(--pa-spacing-md);
+  color: var(--pa-text-secondary);
+  font-size: calc(12px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.page-adapter-menu-section h2::before {
+  content: '';
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--pa-primary);
+}
+
+/* ============================================================================
+   Menu window – presets grid
+   ============================================================================ */
 .page-adapter-presets-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--pa-spacing-sm);
 }
 
+/* Each preset is wrapped so a small cancel button can float in the
+   top-right corner without nesting interactive elements. */
+.page-adapter-preset-wrapper {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+}
+
+.page-adapter-preset-wrapper .page-adapter-preset-button {
+  flex: 1;
+  min-width: 0;
+}
+
 .page-adapter-preset-button {
+  position: relative;
+  overflow: hidden;
+  display: flex;
   align-items: center;
-  background: var(--pa-bg-surface);
+  gap: var(--pa-spacing-md);
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
   border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
-  cursor: pointer;
-  display: flex;
-  gap: var(--pa-spacing-sm);
-  min-height: 42px;
-  padding: 9px 10px;
+  font-family: var(--pa-font-family);
+  font-size: calc(15px * var(--pa-font-scale));
+  font-weight: 500;
   text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  font-size: var(--pa-font-size-base);
-  font-size: var(--font-size-base);
-  width: 100%;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .page-adapter-preset-button:hover {
   background: var(--pa-bg-subtle);
   border-color: var(--pa-border-input);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.page-adapter-preset-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
 }
 
 .page-adapter-preset-button:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .page-adapter-preset-icon {
-  background: var(--pa-bg-subtle);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-primary);
   display: grid;
-  font-size: 12px;
-  font-weight: 700;
-  height: 24px;
   place-items: center;
-  width: 24px;
   flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--pa-radius-sm);
+  background: color-mix(in oklab, var(--pa-primary) 14%, transparent);
+  color: var(--pa-primary);
+  font-size: calc(15px * var(--pa-font-scale));
+  font-weight: 700;
 }
 
 .page-adapter-preset-icon svg {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
+  stroke: currentColor;
 }
 
-.page-adapter-input-label {
+/* ---------------------------------------------------------------------------
+   Per-preset cancel button.
+   A small circular button with an X icon that fades in only while the
+   associated preset is running. Clicking it aborts the in-flight request
+   for that preset.
+   --------------------------------------------------------------------------- */
+.page-adapter-preset-cancel {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pa-bg-surface);
   color: var(--pa-text-secondary);
-  display: block;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: var(--pa-spacing-sm);
-}
-
-.page-adapter-model-row input[type='text'] {
-  background: var(--pa-bg-input);
-  border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-md);
-  color: var(--pa-text-primary);
-  font-size: 16px;
-  outline: none;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
-  width: 100%;
-}
-
-.page-adapter-model-row input[type='text']:focus {
-  border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
-}
-
-.page-adapter-toggle-row {
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
-  color: var(--pa-text-secondary);
-  display: flex;
-  gap: var(--pa-spacing-md);
-  justify-content: space-between;
-  font-size: 13px;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
-.page-adapter-toggle-row input[type='checkbox'] {
-  accent-color: var(--pa-primary);
-  height: 16px;
-  width: 16px;
+.page-adapter-preset-wrapper--active .page-adapter-preset-cancel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.page-adapter-preset-cancel:hover {
+  background: color-mix(in oklab, var(--pa-danger) 12%, var(--pa-bg-surface));
+  color: var(--pa-danger);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.page-adapter-preset-cancel:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-preset-cancel svg {
+  width: 11px;
+  height: 11px;
+  display: block;
+  color: currentColor;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-cancel {
+  border: 1px solid var(--pa-border-color);
+  box-shadow: none;
+}
+
+.page-adapter-preset-button--active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    color-mix(in oklab, var(--pa-primary) 60%, white) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: page-adapter-sheen 1.6s linear infinite;
+  opacity: 1;
+  mix-blend-mode: screen;
+}
+
+@keyframes page-adapter-sheen {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-preset-button--active::after {
+    animation: none;
+    opacity: 0;
+  }
+  .page-adapter-preset-button:hover {
+    transform: none;
+  }
+  .page-adapter-preset-cancel {
+    transition: none;
+    transform: none;
+  }
 }
 
 /* ============================================================================
-   Prompt textarea wrapper
-   The textarea and its submit button share a relatively-positioned wrapper
-   so the button can be placed in the textarea's bottom-right corner while
-   remaining visually inside the input area. The textarea keeps extra
-   bottom/right padding to reserve room for the button.
+   Menu window – input section
    ============================================================================ */
+.page-adapter-input-section {
+  padding-top: var(--pa-spacing-lg);
+  border-top: 1px solid var(--pa-border-color);
+}
+
+.page-adapter-input-label {
+  display: block;
+  margin-bottom: var(--pa-spacing-sm);
+  color: var(--pa-text-secondary);
+  font-size: calc(13px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .page-adapter-textarea-wrapper {
   position: relative;
   display: block;
@@ -881,25 +1088,29 @@
 }
 
 .page-adapter-textarea-wrapper .page-adapter-menu-textarea {
-  padding: 12px 12px 56px 12px;
+  padding: 14px 14px 60px 14px;
 }
 
 .page-adapter-menu-textarea {
   box-sizing: border-box;
-  background: var(--pa-bg-input);
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  padding: 14px;
   border: 1px solid var(--pa-border-input);
   border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-input);
   color: var(--pa-text-primary);
-  display: block;
-  font-size: 16px;
-  line-height: 1.5;
-  min-height: 120px;
-  outline: none;
-  padding: var(--pa-spacing-md);
-  resize: vertical;
-  width: 100%;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   font-family: var(--pa-font-family);
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.55;
+  resize: vertical;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-menu-textarea::placeholder {
+  color: var(--pa-text-muted);
 }
 
 .page-adapter-menu-textarea:focus {
@@ -912,16 +1123,13 @@
   cursor: not-allowed;
 }
 
-/* ============================================================================
-   Send button (circular, white arrow inside a blue circle).
-   Positioned inside the textarea's bottom-right corner via the wrapper.
-   ============================================================================ */
+/* Send button – circular, positioned inside the textarea corner. */
 .page-adapter-send-button {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 36px;
-  height: 36px;
+  right: 10px;
+  bottom: 10px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -931,13 +1139,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.15s ease;
   flex-shrink: 0;
   z-index: 1;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--pa-primary) 45%, transparent);
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
 .page-adapter-send-button:hover {
   background: var(--pa-primary-hover);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--pa-primary) 55%, transparent);
 }
 
 .page-adapter-send-button:active {
@@ -947,6 +1157,7 @@
 .page-adapter-send-button:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .page-adapter-send-button:focus-visible {
@@ -965,6 +1176,7 @@
 :host-context(.page-adapter-high-contrast) .page-adapter-send-button {
   color: #000000;
   border: 2px solid #ffffff;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -977,28 +1189,32 @@
 }
 
 .page-adapter-input-footer {
-  align-items: center;
   display: flex;
-  gap: var(--pa-spacing-md);
+  align-items: center;
   justify-content: space-between;
+  gap: var(--pa-spacing-md);
   margin-top: var(--pa-spacing-sm);
 }
 
 .page-adapter-counter {
   color: var(--pa-text-muted);
-  font-size: 11px;
+  font-size: calc(12px * var(--pa-font-scale));
+  font-variant-numeric: tabular-nums;
 }
 
+/* ============================================================================
+   Menu window – secondary/action buttons
+   ============================================================================ */
 .page-adapter-primary-button {
-  background: var(--pa-primary);
+  padding: 9px 16px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-primary);
   color: #ffffff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(14px * var(--pa-font-scale));
   font-weight: 600;
-  padding: 9px 16px;
-  transition: background 0.15s ease;
+  transition: background 150ms ease;
 }
 
 .page-adapter-primary-button:hover {
@@ -1015,14 +1231,94 @@
   outline-offset: 2px;
 }
 
-.page-adapter-status {
+/* ============================================================================
+   Menu window – settings panel
+   ============================================================================ */
+.page-adapter-settings-panel {
+  padding: var(--pa-spacing-lg);
+  border: 1px solid var(--pa-border-color);
+  border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-subtle);
+}
+
+.page-adapter-settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pa-spacing-md);
+}
+
+.page-adapter-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pa-spacing-md);
+}
+
+.page-adapter-preference-row label {
   color: var(--pa-text-secondary);
-  font-size: 14px;
+  font-size: calc(14px * var(--pa-font-scale));
+  font-weight: 500;
+}
+
+.page-adapter-preference-row select,
+.page-adapter-preference-row input[type='text'] {
+  min-width: 150px;
+  max-width: 60%;
+  padding: 8px 11px;
+  border: 1px solid var(--pa-border-input);
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-bg-input);
+  color: var(--pa-text-primary);
+  font-family: inherit;
+  font-size: calc(14px * var(--pa-font-scale));
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-preference-row select:focus,
+.page-adapter-preference-row input[type='text']:focus {
+  border-color: var(--pa-border-focus);
+  box-shadow: var(--pa-shadow-focus);
+}
+
+.page-adapter-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pa-spacing-md);
+  color: var(--pa-text-secondary);
+  font-size: calc(14px * var(--pa-font-scale));
+  cursor: pointer;
+}
+
+.page-adapter-toggle-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--pa-primary);
+  cursor: pointer;
+}
+
+.page-adapter-model-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.page-adapter-model-row input[type='text'] {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* ============================================================================
+   Menu window – status messages
+   ============================================================================ */
+.page-adapter-status {
   min-height: 20px;
+  color: var(--pa-text-secondary);
+  font-size: calc(14px * var(--pa-font-scale));
 }
 
 .page-adapter-status.error {
-  color: #dc2626;
+  color: var(--pa-danger);
 }
 
 .page-adapter-status.success {
@@ -1037,42 +1333,14 @@
 }
 
 .page-adapter-menu-preferences {
-  border-top: 1px solid var(--pa-border-color);
-  padding-top: var(--pa-spacing-lg);
   margin-top: var(--pa-spacing-sm);
+  padding-top: var(--pa-spacing-lg);
+  border-top: 1px solid var(--pa-border-color);
 }
 
-.page-adapter-preference-row {
-  align-items: center;
-  display: flex;
-  gap: var(--pa-spacing-md);
-  justify-content: space-between;
-  margin-bottom: var(--pa-spacing-sm);
-}
-
-.page-adapter-preference-row label {
-  color: var(--pa-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.page-adapter-preference-row select {
-  background: var(--pa-bg-input);
-  border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-primary);
-  font-size: 13px;
-  outline: none;
-  padding: var(--pa-spacing-xs) var(--pa-spacing-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.page-adapter-preference-row select:focus {
-  border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
-}
-
-/* Resize handle */
+/* ============================================================================
+   Resize handle
+   ============================================================================ */
 .page-adapter-resize-handle {
   position: absolute;
   bottom: 0;
@@ -1092,160 +1360,39 @@
 }
 
 /* ============================================================================
-   Title bar
+   Chat view container
    ============================================================================ */
-.page-adapter-title-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
-  background: var(--pa-bg-subtle);
-  cursor: move;
-  border-bottom: 1px solid var(--pa-border-color);
-  flex-shrink: 0;
-  gap: var(--pa-spacing-sm);
-}
-
-.page-adapter-title-text {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--pa-text-primary);
-  flex: 1;
-}
-
-/* Settings toggle button (in title bar) */
-.page-adapter-settings-toggle {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 0 40px;
-}
-
-.page-adapter-settings-toggle:hover {
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-settings-toggle:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-settings-toggle svg {
-  width: 24px;
-  height: 24px;
-  display: block;
-  fill: currentColor;
-}
-
-/* Close button (in title bar) */
-.page-adapter-close {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 0 40px;
-}
-
-.page-adapter-close:hover {
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-close:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-close svg {
-  width: 24px;
-  height: 24px;
-  display: block;
-  stroke: currentColor;
-}
-
-.page-adapter-floating-window *,
-.page-adapter-floating-window *::before,
-.page-adapter-floating-window *::after {
-  box-sizing: border-box;
-}
-
-/* ============================================================================
-   Back button (in title bar)
-   ============================================================================ */
-.page-adapter-back-button {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  display: none;  /* hidden by default, shown in chat view */
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 0 40px;
-}
-
-.page-adapter-back-button:hover {
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-back-button:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-back-button svg {
-  width: 24px;
-  height: 24px;
-  display: block;
-  stroke: currentColor;
-  fill: currentColor;
-}
-
-/* Chat view container */
 .page-adapter-chat-view {
-  display: none;  /* hidden by default, shown via JS */
+  display: none;
   flex-direction: column;
   height: 100%;
-  gap: var(--pa-spacing-sm);
+  min-height: 0;
+  gap: var(--pa-spacing-xl);
 }
 
-/* Ensure chat messages take available space */
-.page-adapter-chat-view .page-adapter-chat-messages {
+/* Messages section grows to fill the available vertical space, leaving
+   the input section pinned to the bottom of the view. */
+.page-adapter-chat-messages-section {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  max-height: 400px;
+  min-height: 0;
+}
+
+.page-adapter-chat-messages-section .page-adapter-chat-messages {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-bottom: 0;
   overflow-y: auto;
 }
 
-/* Make the chat input area stick to the bottom */
-.page-adapter-chat-view .page-adapter-chat-input-area {
+.page-adapter-chat-view .page-adapter-input-section {
   flex-shrink: 0;
 }
 
 /* ============================================================================
-   la-05 thinking indicator (adapted to shadow DOM)
+   Thinking indicator (adapted to shadow DOM)
    ============================================================================ */
 .page-adapter-thinking-indicator .la-05__bubble {
   position: relative;
@@ -1316,7 +1463,7 @@
 
 .page-adapter-thinking-indicator .la-05__phase {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: calc(15px * var(--pa-font-scale));
   font-weight: 500;
   letter-spacing: -0.01em;
   background: linear-gradient(90deg, var(--pa-text-muted) 28%, var(--pa-text-primary) 48%, var(--pa-text-muted) 68%) 0 0 / 220% 100%;
@@ -1352,7 +1499,6 @@
   inline-size: 62%;
 }
 
-/* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
   .page-adapter-thinking-indicator * {
     animation: none !important;
@@ -1377,8 +1523,6 @@
 /* ============================================================================
    Scrollbars (modern, minimal, theme-aware)
    ============================================================================ */
-
-/* Containers that scroll */
 .page-adapter-chat-messages,
 .page-adapter-content-area,
 .page-adapter-overlay-content {
@@ -1387,7 +1531,6 @@
   scrollbar-gutter: stable;
 }
 
-/* WebKit (Chromium, Safari) */
 .page-adapter-chat-messages::-webkit-scrollbar,
 .page-adapter-content-area::-webkit-scrollbar,
 .page-adapter-overlay-content::-webkit-scrollbar {
@@ -1422,88 +1565,6 @@
   background: transparent;
 }
 
-/* Separation between quick actions and the request input */
-.page-adapter-input-section {
-  margin-top: var(--pa-spacing-lg);
-  padding-top: var(--pa-spacing-lg);
-  border-top: 1px solid var(--pa-border-color);
-}
-
-/* ============================================================================
-   Cancel button
-   ============================================================================ */
-.page-adapter-cancel-button {
-  background: transparent;
-  border: 1px solid var(--pa-border-input);
-  border-radius: 9px;
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 15px;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.page-adapter-cancel-button:hover {
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-primary);
-  border-color: var(--pa-border-input);
-}
-
-.page-adapter-cancel-button:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-/* ============================================================================
-   Active preset button (shimmer reflecting background)
-   ============================================================================ */
-.page-adapter-preset-button {
-  position: relative;
-  overflow: hidden;
-}
-
-.page-adapter-preset-button {
-  position: relative;
-  overflow: hidden;
-}
-
-.page-adapter-preset-button--active::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 50%;
-  pointer-events: none;
-  background: linear-gradient(
-    115deg,
-    transparent 20%,
-    color-mix(in oklab, var(--pa-primary) 60%, white) 50%,
-    transparent 80%
-  );
-  transform: translateX(-100%);
-  animation: page-adapter-sheen 1.6s linear infinite;
-  opacity: 1;
-  mix-blend-mode: screen;
-}
-
-@keyframes page-adapter-sheen {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(300%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-adapter-preset-button--active::after {
-    animation: none;
-    opacity: 0;
-  }
-}
-
 /* ============================================================================
    Transient status message (main view)
    ============================================================================ */
@@ -1519,15 +1580,15 @@
   color: var(--pa-text-primary);
   border: 1px solid var(--pa-border-color);
   box-shadow: var(--pa-shadow-panel);
-  font-size: 13px;
+  font-size: calc(14px * var(--pa-font-scale));
   text-align: center;
   z-index: 10;
   animation: pa-fade-in 0.15s ease;
 }
 
 .page-adapter-transient-status--error {
-  border-color: #dc2626;
-  color: #dc2626;
+  border-color: var(--pa-danger);
+  color: var(--pa-danger);
 }
 
 :host-context(.page-adapter-theme-dark) .page-adapter-transient-status--error {

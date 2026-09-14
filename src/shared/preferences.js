@@ -16,10 +16,12 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   ollamaModel: 'qwen3.5:2b',
   highContrast: false,
   simplifiedUi: false,
+  fontSize: 'medium',
 });
 
 const VALID_THEMES = new Set(['system', 'light', 'dark']);
 const VALID_LOCALES = new Set(['system', 'en', 'es']);
+const VALID_FONT_SIZES = new Set(['small', 'medium', 'large']);
 
 // =============================================================================
 // Helpers
@@ -35,6 +37,9 @@ function normalizePreferences(preferences = {}) {
   const ollamaModel = typeof preferences.ollamaModel === 'string' && preferences.ollamaModel.trim()
     ? preferences.ollamaModel.trim()
     : DEFAULT_PREFERENCES.ollamaModel;
+  const fontSize = VALID_FONT_SIZES.has(preferences.fontSize)
+    ? preferences.fontSize
+    : DEFAULT_PREFERENCES.fontSize;
 
   return {
     theme,
@@ -42,6 +47,7 @@ function normalizePreferences(preferences = {}) {
     ollamaModel,
     highContrast: Boolean(preferences.highContrast),
     simplifiedUi: Boolean(preferences.simplifiedUi),
+    fontSize,
   };
 }
 

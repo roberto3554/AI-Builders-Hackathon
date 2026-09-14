@@ -29,6 +29,10 @@ export default {
   'popup.preferences.ollama_model': 'Ollama model',
   'popup.preferences.high_contrast': 'High contrast',
   'popup.preferences.simplified_ui': 'Simplified interface',
+  'popup.preferences.font_size': 'Font size',
+  'popup.preferences.font_size_small': 'Small',
+  'popup.preferences.font_size_medium': 'Medium',
+  'popup.preferences.font_size_large': 'Large',
   'popup.preferences.theme_system': 'System',
   'popup.preferences.theme_light': 'Light',
   'popup.preferences.theme_dark': 'Dark',
@@ -51,6 +55,11 @@ export default {
   'popup.info.version': 'Version: {{version}}',
 
   // ===========================================================================
+  // Content – Quick menu
+  // ===========================================================================
+  'quick_menu.open_menu': 'Open menu',
+
+  // ===========================================================================
   // Content – Summaries
   // ===========================================================================
   'summary.generating': 'Generating summary…',
@@ -60,6 +69,8 @@ export default {
   // ===========================================================================
   // Content – Chat
   // ===========================================================================
+  'chat.section_title': 'Conversation',
+  'chat.input_label': 'Ask a question',
   'chat.input_placeholder': 'Ask a question about the content…',
   'chat.send_button': 'Ask',
   'chat.error': 'Error: {{message}}',

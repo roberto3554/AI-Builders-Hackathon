@@ -29,6 +29,10 @@ export default {
   'popup.preferences.ollama_model': 'Modelo de Ollama',
   'popup.preferences.high_contrast': 'Alto contraste',
   'popup.preferences.simplified_ui': 'Interfaz simplificada',
+  'popup.preferences.font_size': 'Tamaño de fuente',
+  'popup.preferences.font_size_small': 'Pequeña',
+  'popup.preferences.font_size_medium': 'Mediana',
+  'popup.preferences.font_size_large': 'Grande',
   'popup.preferences.theme_system': 'Sistema',
   'popup.preferences.theme_light': 'Claro',
   'popup.preferences.theme_dark': 'Oscuro',
@@ -65,6 +69,8 @@ export default {
   // ===========================================================================
   // Content – Chat
   // ===========================================================================
+  'chat.section_title': 'Conversación',
+  'chat.input_label': 'Haz una pregunta',
   'chat.input_placeholder': 'Haz una pregunta sobre el contenido…',
   'chat.send_button': 'Preguntar',
   'chat.error': 'Error: {{message}}',

@@ -25,6 +25,29 @@ const DEFAULT_BUTTON_SIZE = 60;
 const TRANSIENT_STATUS_TIMEOUT_MS = 4000;
 const CHAT_PRESET_ID = 'summarize';
 
+const SEND_ICON_SVG = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 19V5 M5 12l7-7 7 7"
+          stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round"
+          fill="none"/>
+  </svg>
+`;
+
+const STOP_ICON_SVG = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="7" y="7" width="10" height="10" rx="1.6" fill="currentColor"/>
+  </svg>
+`;
+
+const CANCEL_ICON_SVG = `
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M4 4 L12 12 M12 4 L4 12"
+          stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" fill="none"/>
+  </svg>
+`;
+
 // =============================================================================
 // State
 // =============================================================================
@@ -51,6 +74,18 @@ function applyHighContrastToHost(enabled, host) {
 
 function applySimplifiedUiToHost(enabled, host) {
   host.classList.toggle('page-adapter-simplified', enabled);
+}
+
+function applyFontSizeToHost(fontSize, host) {
+  host.classList.remove(
+    'page-adapter-font-small',
+    'page-adapter-font-medium',
+    'page-adapter-font-large'
+  );
+  const safeSize = ['small', 'medium', 'large'].includes(fontSize)
+    ? fontSize
+    : 'medium';
+  host.classList.add(`page-adapter-font-${safeSize}`);
 }
 
 function clampMenuWindowPosition(windowElement, margin = VIEWPORT_MARGIN) {
@@ -111,6 +146,10 @@ async function buildMainView() {
         <label id="theme-label" for="menu-theme">${t('popup.preferences.theme')}</label>
         <select id="menu-theme"></select>
       </div>
+      <div class="page-adapter-preference-row">
+        <label id="font-size-label" for="menu-font-size">${t('popup.preferences.font_size')}</label>
+        <select id="menu-font-size"></select>
+      </div>
       <div class="page-adapter-preference-row page-adapter-model-row">
         <label id="model-label" for="menu-ollama-model">${t('popup.preferences.ollama_model')}</label>
         <input id="menu-ollama-model" type="text" spellcheck="false" autocomplete="off" />
@@ -146,10 +185,6 @@ async function buildMainView() {
   inputLabel.textContent = t('popup.write_need');
   inputSection.appendChild(inputLabel);
 
-  // The textarea and the send button share a relatively positioned wrapper
-  // so the button can be absolutely placed in the textarea's bottom-right
-  // corner. The textarea keeps additional bottom/right padding so text never
-  // runs underneath the button.
   const textareaWrapper = document.createElement('div');
   textareaWrapper.className = 'page-adapter-textarea-wrapper';
 
@@ -167,15 +202,7 @@ async function buildMainView() {
   adaptButton.type = 'button';
   adaptButton.setAttribute('aria-label', t('popup.adapt_button'));
   adaptButton.setAttribute('title', t('popup.adapt_button'));
-
-  const adaptIconUrl = chrome.runtime.getURL('src/assets/icons/arrow-up.svg');
-  try {
-    const svg = await fetchSvgContent(adaptIconUrl);
-    adaptButton.innerHTML = svg;
-  } catch {
-    // Fallback if the SVG asset cannot be loaded.
-    adaptButton.textContent = '↑';
-  }
+  adaptButton.innerHTML = SEND_ICON_SVG;
   textareaWrapper.appendChild(adaptButton);
 
   inputSection.appendChild(textareaWrapper);
@@ -189,14 +216,6 @@ async function buildMainView() {
   counter.textContent = t('popup.counter', { current: 0, max: MAX_REQUEST_LENGTH });
   footer.appendChild(counter);
 
-  const cancelButton = document.createElement('button');
-  cancelButton.id = 'menu-cancel';
-  cancelButton.className = 'page-adapter-cancel-button';
-  cancelButton.type = 'button';
-  cancelButton.textContent = t('popup.cancel_button');
-  cancelButton.hidden = true;
-  footer.appendChild(cancelButton);
-
   inputSection.appendChild(footer);
   container.appendChild(inputSection);
 
@@ -207,15 +226,37 @@ async function buildMainView() {
 // DOM building – Chat view
 // =============================================================================
 
+/**
+ * Builds the chat view using the same section structure as the main view
+ * so that both views share the same visual rhythm and heading treatments.
+ *
+ * @returns {HTMLElement} The chat view container.
+ */
 function buildChatView() {
   const container = document.createElement('div');
   container.className = 'page-adapter-chat-view';
   container.style.display = 'none';
 
+  const messagesSection = document.createElement('section');
+  messagesSection.className =
+    'page-adapter-menu-section page-adapter-chat-messages-section';
+  const messagesLabel = document.createElement('h2');
+  messagesLabel.textContent = t('chat.section_title');
+  messagesSection.appendChild(messagesLabel);
+
   const messagesContainer = document.createElement('div');
   messagesContainer.id = 'chat-messages';
   messagesContainer.className = 'page-adapter-chat-messages';
-  container.appendChild(messagesContainer);
+  messagesSection.appendChild(messagesContainer);
+  container.appendChild(messagesSection);
+
+  const inputSection = document.createElement('section');
+  inputSection.className = 'page-adapter-menu-section page-adapter-input-section';
+  const inputLabel = document.createElement('label');
+  inputLabel.className = 'page-adapter-input-label';
+  inputLabel.setAttribute('for', 'chat-input');
+  inputLabel.textContent = t('chat.input_label');
+  inputSection.appendChild(inputLabel);
 
   const inputArea = document.createElement('div');
   inputArea.className = 'page-adapter-chat-input-area';
@@ -227,21 +268,27 @@ function buildChatView() {
   input.placeholder = t('chat.input_placeholder');
   input.disabled = true;
 
-  const cancelButton = document.createElement('button');
-  cancelButton.id = 'chat-cancel';
-  cancelButton.className = 'page-adapter-cancel-button';
-  cancelButton.type = 'button';
-  cancelButton.textContent = t('popup.cancel_button');
-  cancelButton.hidden = true;
-
   const sendButton = document.createElement('button');
   sendButton.id = 'chat-send';
   sendButton.className = 'page-adapter-chat-send';
-  sendButton.textContent = t('chat.send_button');
+  sendButton.type = 'button';
+  sendButton.setAttribute('aria-label', t('chat.send_button'));
+  sendButton.title = t('chat.send_button');
   sendButton.disabled = true;
+  sendButton.innerHTML = SEND_ICON_SVG;
 
-  inputArea.append(input, cancelButton, sendButton);
-  container.appendChild(inputArea);
+  const stopButton = document.createElement('button');
+  stopButton.id = 'chat-stop';
+  stopButton.className = 'page-adapter-chat-stop';
+  stopButton.type = 'button';
+  stopButton.setAttribute('aria-label', t('popup.cancel_button'));
+  stopButton.title = t('popup.cancel_button');
+  stopButton.hidden = true;
+  stopButton.innerHTML = STOP_ICON_SVG;
+
+  inputArea.append(input, sendButton, stopButton);
+  inputSection.appendChild(inputArea);
+  container.appendChild(inputSection);
 
   return container;
 }
@@ -258,7 +305,7 @@ async function fetchSvgContent(url) {
   return response.text();
 }
 
-async function renderPresets(container, onPresetClick) {
+async function renderPresets(container, onPresetClick, onPresetCancel) {
   container.innerHTML = '';
   for (const preset of PRESETS) {
     const iconUrl = chrome.runtime.getURL(preset.icon || '');
@@ -266,15 +313,20 @@ async function renderPresets(container, onPresetClick) {
     try {
       svgContent = await fetchSvgContent(iconUrl);
     } catch {
-      svgContent = `<span style="font-size:18px;">${preset.id[0].toUpperCase()}</span>`;
+      svgContent = `<span style="font-size:13px;">${preset.id[0].toUpperCase()}</span>`;
     }
+
+    const labelKey = `preset.${preset.id}`;
+    const labelText = t(labelKey);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-adapter-preset-wrapper';
+    wrapper.dataset.presetId = preset.id;
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'page-adapter-preset-button';
     button.dataset.presetId = preset.id;
-    const labelKey = `preset.${preset.id}`;
-    const labelText = t(labelKey);
     button.innerHTML = `
       <span class="page-adapter-preset-icon">${svgContent}</span>
       <span>${escapeHtml(labelText)}</span>
@@ -282,7 +334,20 @@ async function renderPresets(container, onPresetClick) {
     button.addEventListener('click', () => {
       onPresetClick(preset);
     });
-    container.appendChild(button);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'page-adapter-preset-cancel';
+    cancelButton.setAttribute('aria-label', `${t('popup.cancel_button')} — ${labelText}`);
+    cancelButton.title = t('popup.cancel_button');
+    cancelButton.innerHTML = CANCEL_ICON_SVG;
+    cancelButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onPresetCancel(preset);
+    });
+
+    wrapper.append(button, cancelButton);
+    container.appendChild(wrapper);
   }
 }
 
@@ -302,12 +367,12 @@ function updatePopupTexts(container) {
       adaptButton.setAttribute('aria-label', t('popup.adapt_button'));
       adaptButton.setAttribute('title', t('popup.adapt_button'));
     }
-    const cancelButton = mainView.querySelector('#menu-cancel');
-    if (cancelButton) cancelButton.textContent = t('popup.cancel_button');
     const langLabel = mainView.querySelector('#language-label');
     if (langLabel) langLabel.textContent = t('popup.preferences.language');
     const themeLabel = mainView.querySelector('#theme-label');
     if (themeLabel) themeLabel.textContent = t('popup.preferences.theme');
+    const fontSizeLabel = mainView.querySelector('#font-size-label');
+    if (fontSizeLabel) fontSizeLabel.textContent = t('popup.preferences.font_size');
     const modelLabel = mainView.querySelector('#model-label');
     if (modelLabel) modelLabel.textContent = t('popup.preferences.ollama_model');
     const highContrastLabel = mainView
@@ -321,15 +386,35 @@ function updatePopupTexts(container) {
       ?.querySelector('span');
     if (simplifiedLabel) simplifiedLabel.textContent = t('popup.preferences.simplified_ui');
   }
+
+  const chatView = container.querySelector('.page-adapter-chat-view');
+  if (chatView) {
+    const chatMessagesTitle = chatView.querySelector(
+      '.page-adapter-chat-messages-section h2'
+    );
+    if (chatMessagesTitle) chatMessagesTitle.textContent = t('chat.section_title');
+
+    const chatInputLabel = chatView.querySelector('.page-adapter-input-label');
+    if (chatInputLabel) chatInputLabel.textContent = t('chat.input_label');
+  }
+
   const chatInput = container.querySelector('#chat-input');
   if (chatInput) chatInput.placeholder = t('chat.input_placeholder');
+
   const chatSend = container.querySelector('#chat-send');
-  if (chatSend) chatSend.textContent = t('chat.send_button');
-  const chatCancel = container.querySelector('#chat-cancel');
-  if (chatCancel) chatCancel.textContent = t('popup.cancel_button');
+  if (chatSend) {
+    chatSend.setAttribute('aria-label', t('chat.send_button'));
+    chatSend.title = t('chat.send_button');
+  }
+
+  const chatStop = container.querySelector('#chat-stop');
+  if (chatStop) {
+    chatStop.setAttribute('aria-label', t('popup.cancel_button'));
+    chatStop.title = t('popup.cancel_button');
+  }
 }
 
-function updateSelectOptions(languageSelect, themeSelect) {
+function updateSelectOptions(languageSelect, themeSelect, fontSizeSelect) {
   const langOptions = languageSelect.querySelectorAll('option');
   langOptions.forEach((opt) => {
     const key = `popup.preferences.language_${opt.value}`;
@@ -340,6 +425,13 @@ function updateSelectOptions(languageSelect, themeSelect) {
     const key = `popup.preferences.theme_${opt.value}`;
     opt.textContent = t(key);
   });
+  if (fontSizeSelect) {
+    const fontSizeOptions = fontSizeSelect.querySelectorAll('option');
+    fontSizeOptions.forEach((opt) => {
+      const key = `popup.preferences.font_size_${opt.value}`;
+      opt.textContent = t(key);
+    });
+  }
 }
 
 // =============================================================================
@@ -449,18 +541,18 @@ function showThinkingIndicator(
 function setChatLoading(container, loading, phases) {
   const input = container.querySelector('#chat-input');
   const sendButton = container.querySelector('#chat-send');
-  const cancelButton = container.querySelector('#chat-cancel');
+  const stopButton = container.querySelector('#chat-stop');
 
   if (loading) {
     showThinkingIndicator(container, phases);
     if (input) input.disabled = true;
-    if (sendButton) sendButton.disabled = true;
-    if (cancelButton) cancelButton.hidden = false;
+    if (sendButton) sendButton.hidden = true;
+    if (stopButton) stopButton.hidden = false;
   } else {
     removeThinkingIndicator(container);
     if (input) input.disabled = false;
-    if (sendButton) sendButton.disabled = false;
-    if (cancelButton) cancelButton.hidden = true;
+    if (sendButton) sendButton.hidden = false;
+    if (stopButton) stopButton.hidden = true;
   }
 }
 
@@ -469,24 +561,26 @@ function setChatLoading(container, loading, phases) {
 // =============================================================================
 
 function setPresetLoading(container, presetId, loading) {
-  const presetButtons = container.querySelectorAll('.page-adapter-preset-button');
+  const wrappers = container.querySelectorAll('.page-adapter-preset-wrapper');
   const adaptButton = container.querySelector('#menu-adapt');
-  const cancelButton = container.querySelector('#menu-cancel');
   const textarea = container.querySelector('#menu-request');
 
-  presetButtons.forEach((btn) => {
-    const isActive = btn.dataset.presetId === presetId;
+  wrappers.forEach((wrapper) => {
+    const btn = wrapper.querySelector('.page-adapter-preset-button');
+    if (!btn) return;
+    const isActive = wrapper.dataset.presetId === presetId;
     btn.disabled = loading;
     if (loading && isActive) {
       btn.classList.add('page-adapter-preset-button--active');
+      wrapper.classList.add('page-adapter-preset-wrapper--active');
     } else {
       btn.classList.remove('page-adapter-preset-button--active');
+      wrapper.classList.remove('page-adapter-preset-wrapper--active');
     }
   });
 
   if (adaptButton) adaptButton.disabled = loading;
   if (textarea) textarea.disabled = loading;
-  if (cancelButton) cancelButton.hidden = !loading;
 }
 
 function showTransientStatus(container, text, type = 'success') {
@@ -518,17 +612,18 @@ function cancelCurrentRequest(container) {
   removeThinkingIndicator(container);
   setChatLoading(container, false);
 
-  const presetButtons = container.querySelectorAll('.page-adapter-preset-button');
-  presetButtons.forEach((btn) => {
-    btn.disabled = false;
-    btn.classList.remove('page-adapter-preset-button--active');
+  const wrappers = container.querySelectorAll('.page-adapter-preset-wrapper');
+  wrappers.forEach((wrapper) => {
+    const btn = wrapper.querySelector('.page-adapter-preset-button');
+    if (btn) btn.disabled = false;
+    wrapper.classList.remove('page-adapter-preset-wrapper--active');
+    if (btn) btn.classList.remove('page-adapter-preset-button--active');
   });
+
   const adaptButton = container.querySelector('#menu-adapt');
-  const cancelButtonMain = container.querySelector('#menu-cancel');
   const textarea = container.querySelector('#menu-request');
   if (adaptButton) adaptButton.disabled = false;
   if (textarea) textarea.disabled = false;
-  if (cancelButtonMain) cancelButtonMain.hidden = true;
 }
 
 async function sendRequest(message, container, { navigateToChat = false, presetId = null } = {}) {
@@ -624,6 +719,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   applyThemeToHost(prefs.theme, host);
   applyHighContrastToHost(prefs.highContrast, host);
   applySimplifiedUiToHost(prefs.simplifiedUi, host);
+  applyFontSizeToHost(prefs.fontSize, host);
   setLocale(prefs.locale);
   updateFloatingWindowTitle(windowElement);
 
@@ -633,9 +729,9 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   const textarea = mainView.querySelector('#menu-request');
   const counter = mainView.querySelector('#menu-counter');
   const adaptButton = mainView.querySelector('#menu-adapt');
-  const cancelButtonMain = mainView.querySelector('#menu-cancel');
   const languageSelect = mainView.querySelector('#menu-language');
   const themeSelect = mainView.querySelector('#menu-theme');
+  const fontSizeSelect = mainView.querySelector('#menu-font-size');
   const modelInput = mainView.querySelector('#menu-ollama-model');
   const highContrastToggle = mainView.querySelector('#menu-high-contrast');
   const simplifiedToggle = mainView.querySelector('#menu-simplified-ui');
@@ -643,7 +739,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
 
   const chatInput = chatView.querySelector('#chat-input');
   const chatSend = chatView.querySelector('#chat-send');
-  const chatCancel = chatView.querySelector('#chat-cancel');
+  const chatStop = chatView.querySelector('#chat-stop');
 
   const langOptions = [
     { value: 'system', label: t('popup.preferences.language_system') },
@@ -655,6 +751,11 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     { value: 'light', label: t('popup.preferences.theme_light') },
     { value: 'dark', label: t('popup.preferences.theme_dark') },
   ];
+  const fontSizeOptions = [
+    { value: 'small', label: t('popup.preferences.font_size_small') },
+    { value: 'medium', label: t('popup.preferences.font_size_medium') },
+    { value: 'large', label: t('popup.preferences.font_size_large') },
+  ];
 
   languageSelect.innerHTML = langOptions
     .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
@@ -662,15 +763,19 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   themeSelect.innerHTML = themeOptions
     .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
     .join('');
+  fontSizeSelect.innerHTML = fontSizeOptions
+    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
+    .join('');
 
   languageSelect.value = prefs.locale;
   themeSelect.value = prefs.theme;
+  fontSizeSelect.value = prefs.fontSize;
   modelInput.value = prefs.ollamaModel || DEFAULT_PREFERENCES.ollamaModel;
   highContrastToggle.checked = prefs.highContrast;
   simplifiedToggle.checked = prefs.simplifiedUi;
 
   updatePopupTexts(container);
-  updateSelectOptions(languageSelect, themeSelect);
+  updateSelectOptions(languageSelect, themeSelect, fontSizeSelect);
 
   const onPresetClick = (preset) => {
     const message = createUserRequest({
@@ -682,7 +787,11 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     sendRequest(message, container, { navigateToChat, presetId: preset.id });
   };
 
-  await renderPresets(presetsGrid, onPresetClick);
+  const onPresetCancel = () => {
+    cancelCurrentRequest(container);
+  };
+
+  await renderPresets(presetsGrid, onPresetClick, onPresetCancel);
 
   function closeSettingsPanel() {
     settingsPanel.hidden = true;
@@ -722,11 +831,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     sendRequest(message, container, { navigateToChat: true });
   });
 
-  cancelButtonMain.addEventListener('click', () => {
-    cancelCurrentRequest(container);
-  });
-
-  chatCancel.addEventListener('click', () => {
+  chatStop.addEventListener('click', () => {
     cancelCurrentRequest(container);
   });
 
@@ -765,8 +870,8 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     setLocale(locale);
     updatePopupTexts(container);
     updateFloatingWindowTitle(windowElement);
-    updateSelectOptions(languageSelect, themeSelect);
-    await renderPresets(presetsGrid, onPresetClick);
+    updateSelectOptions(languageSelect, themeSelect, fontSizeSelect);
+    await renderPresets(presetsGrid, onPresetClick, onPresetCancel);
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tab = tabs[0];
@@ -794,6 +899,26 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
         await chrome.tabs.sendMessage(tab.id, {
           type: MESSAGE_TYPES.SET_THEME,
           payload: { theme },
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  });
+
+  fontSizeSelect.addEventListener('change', async (e) => {
+    const fontSize = e.target.value;
+    const newPrefs = await loadPreferences();
+    newPrefs.fontSize = fontSize;
+    await savePreferences(newPrefs);
+    applyFontSizeToHost(fontSize, shadowRoot.host);
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tab = tabs[0];
+      if (tab?.id) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: MESSAGE_TYPES.SET_FONT_SIZE,
+          payload: { fontSize },
         });
       }
     } catch {
@@ -974,7 +1099,6 @@ export async function createMenuWindow(floatingButton, shadowRoot) {
       if (activeWindow) {
         const menuContainer = activeWindow.querySelector('.page-adapter-menu-container');
         if (menuContainer) {
-          // Cancel any in-flight request when returning to the main view.
           cancelCurrentRequest(menuContainer);
           showMainView(menuContainer);
         }
@@ -1058,7 +1182,6 @@ export function closeMenuWindow() {
     const rect = activeWindow.getBoundingClientRect();
     saveWindowSize(rect.width, rect.height);
 
-    // Cancel any in-flight request before closing.
     const menuContainer = activeWindow.querySelector('.page-adapter-menu-container');
     if (menuContainer) {
       cancelCurrentRequest(menuContainer);

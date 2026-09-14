@@ -48,7 +48,7 @@ if (!document.documentElement.dataset.pageAdapterInjected) {
 }
 
 // =============================================================================
-// Theme & locale handling (now applied to shadow root via classes on host)
+// Theme, contrast, simplification and font size handling
 // =============================================================================
 
 /**
@@ -71,6 +71,25 @@ function applyHighContrast(enabled) {
 
 function applySimplifiedUi(enabled) {
   host.classList.toggle('page-adapter-simplified', enabled);
+}
+
+/**
+ * Applies the font size scale to the host element. The corresponding host
+ * classes override the `--pa-font-scale` custom property, which is consumed
+ * by every `font-size` declaration in the shadow CSS.
+ *
+ * @param {string} fontSize - 'small', 'medium', or 'large'.
+ */
+function applyFontSize(fontSize) {
+  host.classList.remove(
+    'page-adapter-font-small',
+    'page-adapter-font-medium',
+    'page-adapter-font-large'
+  );
+  const safeSize = ['small', 'medium', 'large'].includes(fontSize)
+    ? fontSize
+    : 'medium';
+  host.classList.add(`page-adapter-font-${safeSize}`);
 }
 
 // =============================================================================
@@ -136,6 +155,12 @@ async function onRuntimeMessage(message, sender, sendResponse) {
         return true;
       }
 
+      case 'SET_FONT_SIZE': {
+        applyFontSize(message.payload.fontSize);
+        sendResponse({ ok: true });
+        return true;
+      }
+
       case 'SET_LOCALE': {
         const { setLocale } = await import('../shared/locale.js');
         setLocale(message.payload.locale);
@@ -193,6 +218,7 @@ chrome.runtime.onMessage.addListener(onRuntimeMessage);
   applyTheme(prefs.theme);
   applyHighContrast(prefs.highContrast);
   applySimplifiedUi(prefs.simplifiedUi);
+  applyFontSize(prefs.fontSize);
 
   // Load locale module and set the locale.
   const { setLocale } = await import('../shared/locale.js');

@@ -3,6 +3,10 @@
  * All colours are defined as CSS variables for theming.
  * Dependencies: none.
  * Used by: popup.html.
+ *
+ * Font scaling is driven by the `--font-scale` custom property, which is set
+ * on the body by popup.js. All text sizes are expressed as
+ * `calc(<base>px * var(--font-scale))` so the setting propagates uniformly.
  */
 
 /* ============================================================================
@@ -27,6 +31,7 @@
   --shadow-popup: 0 18px 50px rgba(0, 0, 0, 0.2);
   --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
   --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-scale: 1;
   --font-size-base: 1rem;
   --font-size-h1: 1.375rem;
   --font-size-h2: 1.25rem;
@@ -111,6 +116,21 @@ body.high-contrast {
   --shadow-popup: none;
 }
 
+/* ============================================================================
+   Font size (applied via class on body)
+   The scale multiplies every text size in the popup so it stays in sync with
+   the content panel's font size setting.
+   ============================================================================ */
+body.font-small {
+  --font-scale: 0.85;
+}
+body.font-medium {
+  --font-scale: 1;
+}
+body.font-large {
+  --font-scale: 1.15;
+}
+
 body.simplified-ui .header p,
 body.simplified-ui .section h2,
 body.simplified-ui #counter {
@@ -140,7 +160,7 @@ body {
   background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-family);
-  font-size: var(--font-size-base);
+  font-size: calc(14px * var(--font-scale));
   line-height: 1.5;
 }
 
@@ -161,7 +181,7 @@ textarea {
 }
 
 h1 {
-  font-size: 22px;
+  font-size: calc(22px * var(--font-scale));
   line-height: 1.2;
   margin: 0;
   color: var(--text-primary);
@@ -169,7 +189,7 @@ h1 {
 
 .header p {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   margin: var(--spacing-sm) 0 0;
 }
 
@@ -179,7 +199,7 @@ h1 {
 
 h2 {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   margin: 0 0 var(--spacing-md);
 }
 
@@ -222,7 +242,7 @@ h2 {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   display: grid;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 700;
   height: 24px;
   place-items: center;
@@ -249,7 +269,7 @@ h2 {
 .input-label {
   color: var(--text-secondary);
   display: block;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   margin-bottom: var(--spacing-sm);
 }
@@ -260,7 +280,7 @@ textarea {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   display: block;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   line-height: 1.5;
   min-height: 120px;
   outline: none;
@@ -290,7 +310,7 @@ textarea:disabled {
 
 #counter {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
 }
 
 /* ============================================================================
@@ -302,7 +322,7 @@ textarea:disabled {
   border-radius: 9px;
   color: #ffffff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   padding: 9px 16px;
   transition: background 0.15s ease;
@@ -327,7 +347,7 @@ textarea:disabled {
    ============================================================================ */
 .status {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   margin-top: var(--spacing-lg);
   min-height: 20px;
 }
@@ -369,7 +389,7 @@ textarea:disabled {
 
 .preference-row label {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 500;
 }
 
@@ -378,7 +398,7 @@ textarea:disabled {
   border: 1px solid var(--border-input);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   outline: none;
   padding: var(--spacing-xs) var(--spacing-sm);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
