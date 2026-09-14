@@ -72,16 +72,18 @@ const ACTION_SCHEMA = {
 // =============================================================================
 
 /**
- * Handles a raw Ollama request.
+ * Handles a raw Ollama request. Accepts an optional AbortSignal so the
+ * underlying fetch can be cancelled when the user aborts a request.
  *
  * @param {object} params - The request parameters.
  * @param {string} params.prompt - The prompt to send.
  * @param {string|null} [params.systemPrompt=null] - Optional system prompt.
  * @param {string} [params.model=OLLAMA_DEFAULT_MODEL] - The model to use.
  * @param {number} [params.numPredict=OLLAMA_NUM_PREDICT] - Max output tokens.
- * @param {boolean|null} [params.think=null] - Optional thinking toggle for models that support it.
+ * @param {boolean|null} [params.think=null] - Optional thinking toggle.
+ * @param {AbortSignal|null} [params.signal=null] - Optional abort signal.
  * @returns {Promise<object>} The Ollama response.
- * @throws Will throw if the fetch fails or returns a non-ok status.
+ * @throws Will throw if the fetch fails, is aborted, or returns a non-ok status.
  */
 export async function handleOllamaRequest({
   prompt,
@@ -89,11 +91,18 @@ export async function handleOllamaRequest({
   model = OLLAMA_DEFAULT_MODEL,
   numPredict = OLLAMA_NUM_PREDICT,
   think = null,
+  signal = null,
 }) {
   if (DEBUG) {
     console.log('[ollama] Sending request to Ollama with model:', model);
     console.log('[ollama] System prompt:', systemPrompt);
     console.log('[ollama] Prompt length:', prompt.length, 'characters');
+  }
+
+  if (signal?.aborted) {
+    const abortError = new Error('Request aborted before dispatch.');
+    abortError.name = 'AbortError';
+    throw abortError;
   }
 
   const body = {
@@ -119,8 +128,12 @@ export async function handleOllamaRequest({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: signal || undefined,
     });
   } catch (fetchError) {
+    if (fetchError.name === 'AbortError') {
+      throw fetchError;
+    }
     console.error('[ollama] Network error connecting to Ollama:', fetchError);
     throw new Error(
       `Could not connect to Ollama at ${OLLAMA_API_URL}. Please ensure it is running.`
@@ -158,18 +171,27 @@ export async function handleOllamaRequest({
  * @param {string|null} systemPrompt - Optional system prompt.
  * @param {string} [model] - Optional model name.
  * @param {number} [numPredict] - Optional max output token count.
- * @param {boolean} [think=false] - Whether to enable thinking mode.
+ * @param {boolean} [think=null] - Whether to enable thinking mode.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<string>} The generated text.
- * @throws Will throw if the Ollama request fails.
+ * @throws Will throw if the Ollama request fails or is aborted.
  */
 export async function callOllama(
   prompt,
   systemPrompt = null,
   model = OLLAMA_DEFAULT_MODEL,
   numPredict = OLLAMA_NUM_PREDICT,
-  think = null
+  think = null,
+  signal = null
 ) {
-  const result = await handleOllamaRequest({ prompt, systemPrompt, model, numPredict, think });
+  const result = await handleOllamaRequest({
+    prompt,
+    systemPrompt,
+    model,
+    numPredict,
+    think,
+    signal,
+  });
   if (!result.ok) {
     throw new Error(result.error || 'Unknown error from Ollama');
   }
@@ -347,9 +369,7 @@ function detectConflicts(actions) {
     if (action.action === 'set_style') {
       for (const [prop, value] of Object.entries(action.style || {})) {
         if (record.style[prop] !== undefined && record.style[prop] !== value) {
-          conflicts.push(
-            `Node ${nodeId}: conflicting style property "${prop}"`
-          );
+          conflicts.push(`Node ${nodeId}: conflicting style property "${prop}"`);
         }
         record.style[prop] = value;
       }
@@ -466,9 +486,8 @@ function getFailingNodesDescription(nodeIds, snapshot) {
  * @param {object} plan - Parsed plan from model.
  * @param {object} snapshot - The DOM snapshot.
  * @returns {object} Normalized plan with validated actions.
- * @throws Will throw with a detailed error if validation fails for structural
- *   reasons, or if the model returned actions but none of them passed
- *   validation (which signals a malformed response that should be retried).
+ * @throws Will throw if validation fails structurally, or if every action the
+ *   model returned failed per-action validation.
  */
 function validateAndNormalizePlan(plan, snapshot) {
   if (!plan || typeof plan !== 'object') {
@@ -497,10 +516,9 @@ function validateAndNormalizePlan(plan, snapshot) {
     normalizedActions.push(action);
   }
 
-  // If the model produced actions but none survived validation, fail loudly so
-  // the retry loop in handleDomAdaptation can reissue the prompt with the
-  // previous error appended. Silently returning an empty plan hides the
-  // problem and forces an unnecessary fallback.
+  // Fail loudly when the model produced actions but none of them passed
+  // validation, so the retry loop can reissue the prompt with the previous
+  // error appended instead of silently returning an empty plan.
   if (normalizedActions.length === 0 && plan.actions.length > 0) {
     throw new Error(
       `All ${plan.actions.length} action(s) returned by the model failed validation.`
@@ -526,18 +544,7 @@ function validateAndNormalizePlan(plan, snapshot) {
 /**
  * Builds the high-contrast adaptation prompt.
  *
- * The prompt lists each failing node and spells out the exact JSON shape of
- * every action, including the required "nodeId" field. Without this schema,
- * smaller models tend to omit "nodeId", which then fails validation and
- * silently produces an empty plan.
- *
  * @param {object} params - Prompt parameters.
- * @param {string} params.request - The user request text.
- * @param {object} params.pageContext - The page context (context + snapshot).
- * @param {number} params.iteration - Current iteration number.
- * @param {boolean} params.hasPreviousActions - Whether actions were already applied.
- * @param {string} params.previousActionsSummary - Summary of previously applied actions.
- * @param {Array<string>} params.failingNodeIds - Node IDs with failing contrast.
  * @returns {string} The formatted prompt.
  */
 function buildHighContrastPrompt({
@@ -599,13 +606,6 @@ function buildHighContrastPrompt({
  * Builds the DOM adaptation prompt.
  *
  * @param {object} params - Prompt parameters.
- * @param {string} params.request - The user request text.
- * @param {object} params.pageContext - The page context (context + snapshot).
- * @param {number} params.iteration - Current iteration number.
- * @param {string|null} params.presetId - Preset identifier, if any.
- * @param {boolean} params.hasPreviousActions - Whether actions were already applied.
- * @param {string} params.previousActionsSummary - Summary of previously applied actions.
- * @param {Array<string>} params.failingNodeIds - Node IDs with failing contrast.
  * @returns {string} The formatted prompt.
  */
 function buildDomAdaptationPrompt({
@@ -647,7 +647,8 @@ function buildDomAdaptationPrompt({
 
   const nodeInfo = [];
   collectNodeInfo(pageContext.snapshot.root, nodeInfo);
-  const nodeListText = nodeInfo.length > 0 ? nodeInfo.join('\n') : '(No nodes available in snapshot)';
+  const nodeListText =
+    nodeInfo.length > 0 ? nodeInfo.join('\n') : '(No nodes available in snapshot)';
 
   return [
     `User request: ${request}`,
@@ -691,7 +692,9 @@ function buildDomAdaptationPrompt({
  * Requests a bounded DOM adaptation plan from Ollama.
  *
  * @param {object} payload - The request payload.
+ * @param {AbortSignal|null} [payload.signal=null] - Optional abort signal.
  * @returns {Promise<object>} The validated adaptation plan.
+ * @throws Will throw on abort, validation failure, or exhausted retries.
  */
 export async function handleDomAdaptation({
   request,
@@ -701,6 +704,7 @@ export async function handleDomAdaptation({
   hasPreviousActions = false,
   previousActionsSummary = '',
   failingNodeIds = [],
+  signal = null,
 }) {
   const basePrompt = buildDomAdaptationPrompt({
     request,
@@ -731,13 +735,26 @@ export async function handleDomAdaptation({
   let plan = null;
 
   while (retries <= MAX_LLM_RESPONSE_RETRIES) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
     try {
       let prompt = basePrompt;
       if (retries > 0 && lastError) {
         prompt += `\n\nYour previous response was invalid: ${lastError}\nPlease correct the response and return only valid JSON.`;
       }
 
-      const responseText = await callOllama(prompt, systemPrompt, await getPreferredModel());
+      const responseText = await callOllama(
+        prompt,
+        systemPrompt,
+        await getPreferredModel(),
+        OLLAMA_NUM_PREDICT,
+        null,
+        signal
+      );
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response from Ollama');
       }
@@ -751,6 +768,11 @@ export async function handleDomAdaptation({
         summary: validatedPlan.summary,
       };
     } catch (error) {
+      // Do not retry aborted requests; propagate immediately so the caller
+      // can stop the loop and clean up.
+      if (error.name === 'AbortError') {
+        throw error;
+      }
       lastError = error.message;
       console.warn(`[ollama] Validation attempt ${retries + 1} failed:`, lastError);
       retries++;
@@ -772,9 +794,10 @@ export async function handleDomAdaptation({
  * Handles a summarize request by calling Ollama.
  *
  * @param {object} payload - The summarize payload.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<object>} Response containing the summary.
  */
-export async function handleSummarize({ text, title }) {
+export async function handleSummarize({ text, title }, signal = null) {
   const prompt = `Summarize the following content clearly and concisely, highlighting the main points. If it is an article, extract the key ideas. The title is: "${title}".\n\n${text.slice(
     0,
     15000
@@ -782,7 +805,14 @@ export async function handleSummarize({ text, title }) {
   const systemPrompt =
     'You are a helpful assistant that summarizes web content clearly and concisely.';
   try {
-    const summary = await callOllama(prompt, systemPrompt, await getPreferredModel());
+    const summary = await callOllama(
+      prompt,
+      systemPrompt,
+      await getPreferredModel(),
+      OLLAMA_NUM_PREDICT,
+      null,
+      signal
+    );
     return { ok: true, summary };
   } catch (error) {
     throw new Error(t('error.ollama_generic', { message: error.message }));
@@ -793,16 +823,25 @@ export async function handleSummarize({ text, title }) {
  * Handles a chat question by calling Ollama with context.
  *
  * @param {object} payload - The chat payload.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<object>} Response containing the answer.
  */
-export async function handleChatQuestion({ question, context }) {
+export async function handleChatQuestion({ question, context }, signal = null) {
   const prompt = `Based on the following content, answer the user's question in a helpful and accurate way. If you cannot find the answer, say so clearly.\n\nContent:\n${context.slice(
     0,
     15000
   )}\n\nQuestion: ${question}`;
-  const systemPrompt = 'You are a helpful assistant that answers questions about webpage content.';
+  const systemPrompt =
+    'You are a helpful assistant that answers questions about webpage content.';
   try {
-    const answer = await callOllama(prompt, systemPrompt, await getPreferredModel());
+    const answer = await callOllama(
+      prompt,
+      systemPrompt,
+      await getPreferredModel(),
+      OLLAMA_NUM_PREDICT,
+      null,
+      signal
+    );
     return { ok: true, answer };
   } catch (error) {
     throw new Error(t('error.chat_generic', { message: error.message }));

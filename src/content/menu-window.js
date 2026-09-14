@@ -56,8 +56,22 @@ let activeWindow = null;
 let activeFloatingButton = null;
 
 // =============================================================================
-// Preferences helpers (applied to host)
+// Helpers
 // =============================================================================
+
+/**
+ * Generates a unique identifier used to correlate a user request with its
+ * cancellation message. Uses crypto.randomUUID when available and falls back
+ * to a timestamp-based identifier otherwise.
+ *
+ * @returns {string} A random request identifier.
+ */
+function generateRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function applyThemeToHost(theme, host) {
   host.classList.remove('page-adapter-theme-dark', 'page-adapter-theme-light');
@@ -119,7 +133,7 @@ function escapeHtml(value) {
 }
 
 // =============================================================================
-// DOM building – Main view
+// DOM building - Main view
 // =============================================================================
 
 /**
@@ -223,7 +237,7 @@ async function buildMainView() {
 }
 
 // =============================================================================
-// DOM building – Chat view
+// DOM building - Chat view
 // =============================================================================
 
 /**
@@ -538,6 +552,25 @@ function showThinkingIndicator(
   return wrapper;
 }
 
+/**
+ * Recomputes the chat send button's disabled state from the current loading
+ * state and the presence of text in the chat input. Called whenever either of
+ * those two things changes.
+ *
+ * @param {HTMLElement} container - The menu container.
+ * @returns {void}
+ */
+function updateChatSendState(container) {
+  const input = container.querySelector('#chat-input');
+  const sendButton = container.querySelector('#chat-send');
+  const stopButton = container.querySelector('#chat-stop');
+  if (!input || !sendButton || !stopButton) return;
+
+  const isLoading = !stopButton.hidden;
+  const hasText = input.value.trim().length > 0;
+  sendButton.disabled = isLoading || !hasText;
+}
+
 function setChatLoading(container, loading, phases) {
   const input = container.querySelector('#chat-input');
   const sendButton = container.querySelector('#chat-send');
@@ -546,13 +579,17 @@ function setChatLoading(container, loading, phases) {
   if (loading) {
     showThinkingIndicator(container, phases);
     if (input) input.disabled = true;
-    if (sendButton) sendButton.hidden = true;
+    if (sendButton) {
+      sendButton.hidden = true;
+      sendButton.disabled = true;
+    }
     if (stopButton) stopButton.hidden = false;
   } else {
     removeThinkingIndicator(container);
     if (input) input.disabled = false;
     if (sendButton) sendButton.hidden = false;
     if (stopButton) stopButton.hidden = true;
+    updateChatSendState(container);
   }
 }
 
@@ -603,11 +640,32 @@ function showTransientStatus(container, text, type = 'success') {
 // Request sending + cancellation
 // =============================================================================
 
+/**
+ * Cancels the currently active request, if any, and resets the menu UI to its
+ * idle state. The background service worker is notified so that the
+ * adaptation loop stops issuing further DOM changes for the request.
+ *
+ * @param {HTMLElement} container - The menu container.
+ * @returns {void}
+ */
 function cancelCurrentRequest(container) {
   const state = container._requestState;
   if (!state) return;
   state.cancelled = true;
   container._requestState = null;
+
+  // Notify the background so it can abort the request. Without this, the
+  // adaptation loop keeps running even though the popup UI has been reset.
+  if (state.requestId) {
+    chrome.runtime
+      .sendMessage({
+        type: MESSAGE_TYPES.CANCEL_REQUEST,
+        payload: { requestId: state.requestId },
+      })
+      .catch((error) => {
+        console.warn('[Page Adapter] Failed to send cancellation:', error);
+      });
+  }
 
   removeThinkingIndicator(container);
   setChatLoading(container, false);
@@ -626,11 +684,28 @@ function cancelCurrentRequest(container) {
   if (textarea) textarea.disabled = false;
 }
 
+/**
+ * Sends a user request to the background service worker. A fresh request ID
+ * is attached to the outgoing message so the request can be cancelled later.
+ *
+ * @param {object} message - The user request message.
+ * @param {HTMLElement} container - The menu container.
+ * @param {object} [options] - Options.
+ * @param {boolean} [options.navigateToChat=false] - Whether to open the chat view.
+ * @param {string|null} [options.presetId=null] - Preset identifier, if any.
+ * @returns {Promise<void>}
+ */
 async function sendRequest(message, container, { navigateToChat = false, presetId = null } = {}) {
   cancelCurrentRequest(container);
 
-  const requestState = { cancelled: false, presetId: presetId || null };
+  const requestId = generateRequestId();
+  const requestState = { cancelled: false, presetId: presetId || null, requestId };
   container._requestState = requestState;
+
+  const outgoingMessage = {
+    ...message,
+    payload: { ...message.payload, requestId },
+  };
 
   if (navigateToChat) {
     showChatView(container);
@@ -646,7 +721,7 @@ async function sendRequest(message, container, { navigateToChat = false, presetI
   }
 
   try {
-    const response = await chrome.runtime.sendMessage(message);
+    const response = await chrome.runtime.sendMessage(outgoingMessage);
     if (requestState.cancelled) return;
 
     if (navigateToChat) {
@@ -835,6 +910,14 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
     cancelCurrentRequest(container);
   });
 
+  // Keep the send button's disabled state in sync with the input content so it
+  // becomes clickable as soon as the user types and disables itself again once
+  // the input is cleared.
+  chatInput.addEventListener('input', () => {
+    updateChatSendState(container);
+  });
+  updateChatSendState(container);
+
   settingsButton.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleSettingsPanel();
@@ -981,6 +1064,7 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
       request: text,
     });
     chatInput.value = '';
+    updateChatSendState(container);
     sendRequest(message, container, { navigateToChat: true });
   }
 

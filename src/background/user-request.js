@@ -1,7 +1,8 @@
 /**
  * @fileoverview Handles user requests from popup or context menu.
  * Orchestrates tab retrieval, injection, and delegation to content script.
- * Dependencies: injection.js, shared/constants.js, shared/locale.js, simplify.js.
+ * Dependencies: injection.js, shared/constants.js, shared/locale.js,
+ *               simplify.js, ollama.js.
  * Used by: message-handler.js, context-menu.js.
  */
 
@@ -26,29 +27,79 @@ const MAX_TOTAL_ACTIONS = 1000;
 const MAX_FAILING_NODES_PER_ITERATION = 5;
 
 // =============================================================================
-// Helper: count nodes in a snapshot
+// Request cancellation registry
 // =============================================================================
 
 /**
- * Counts the total number of DOM nodes in a snapshot.
+ * Tracks in-flight user requests by their client-provided identifier. Each
+ * token carries an AbortController so the in-flight fetch to Ollama can be
+ * aborted when the user cancels from the UI.
  *
- * @param {object} snapshot - The snapshot object returned by extractDomSnapshot.
- * @returns {number} The total number of nodes.
+ * @type {Map<string, { cancelled: boolean, controller: AbortController }>}
  */
-function countNodes(snapshot) {
-  let count = 0;
-  function traverse(node) {
-    if (!node) return;
-    count++;
-    if (node.children && Array.isArray(node.children)) {
-      for (const child of node.children) {
-        traverse(child);
-        if (count > 10000) break;
-      }
-    }
+const activeRequestTokens = new Map();
+
+/**
+ * Registers a cancellation token for an in-flight user request.
+ *
+ * @param {string|null} requestId - The client-provided request identifier.
+ * @returns {{ cancelled: boolean, controller: AbortController } | null}
+ */
+function registerRequestToken(requestId) {
+  if (!requestId) {
+    return null;
   }
-  traverse(snapshot.root);
-  return count || 1;
+  const controller = new AbortController();
+  const token = { cancelled: false, controller };
+  activeRequestTokens.set(requestId, token);
+  return token;
+}
+
+/**
+ * Releases the cancellation token for a finished user request.
+ *
+ * @param {string|null} requestId - The client-provided request identifier.
+ * @returns {void}
+ */
+function releaseRequestToken(requestId) {
+  if (requestId) {
+    activeRequestTokens.delete(requestId);
+  }
+}
+
+/**
+ * Marks an in-flight user request as cancelled and aborts any active network
+ * operation associated with it. The original request promise still resolves
+ * normally so the caller can clean up its UI.
+ *
+ * @param {string} requestId - The client-provided request identifier.
+ * @returns {boolean} True when a matching in-flight request was found.
+ */
+export function cancelActiveRequest(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  const token = activeRequestTokens.get(requestId);
+  if (!token) {
+    return false;
+  }
+  token.cancelled = true;
+  try {
+    token.controller.abort();
+  } catch {
+    // AbortController.abort() does not normally throw; ignore just in case.
+  }
+  return true;
+}
+
+/**
+ * Returns whether the given token has been cancelled.
+ *
+ * @param {{ cancelled: boolean } | null} token - The cancellation token.
+ * @returns {boolean} True when the token exists and has been cancelled.
+ */
+function isCancelled(token) {
+  return Boolean(token && token.cancelled);
 }
 
 // =============================================================================
@@ -65,25 +116,27 @@ function generateActionsSummary(actions) {
   if (!actions || actions.length === 0) {
     return 'No changes have been applied yet.';
   }
-  const summary = actions.map((action, index) => {
-    const actionDesc = action.action;
-    const nodeId = action.nodeId || 'unknown node';
-    let details = '';
-    if (action.style) {
-      const styleEntries = Object.entries(action.style)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(', ');
-      details = `style { ${styleEntries} }`;
-    } else if (action.text) {
-      details = `text: "${action.text}"`;
-    } else if (action.attributes) {
-      const attrEntries = Object.entries(action.attributes)
-        .map(([key, value]) => `${key}="${value}"`)
-        .join(', ');
-      details = `attributes { ${attrEntries} }`;
-    }
-    return `${index + 1}. ${actionDesc} on node ${nodeId}${details ? ` (${details})` : ''}`;
-  }).join('\n');
+  const summary = actions
+    .map((action, index) => {
+      const actionDesc = action.action;
+      const nodeId = action.nodeId || 'unknown node';
+      let details = '';
+      if (action.style) {
+        const styleEntries = Object.entries(action.style)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+        details = `style { ${styleEntries} }`;
+      } else if (action.text) {
+        details = `text: "${action.text}"`;
+      } else if (action.attributes) {
+        const attrEntries = Object.entries(action.attributes)
+          .map(([key, value]) => `${key}="${value}"`)
+          .join(', ');
+        details = `attributes { ${attrEntries} }`;
+      }
+      return `${index + 1}. ${actionDesc} on node ${nodeId}${details ? ` (${details})` : ''}`;
+    })
+    .join('\n');
   return `Applied changes:\n${summary}`;
 }
 
@@ -144,15 +197,25 @@ async function applyFallbackHighContrast(tabId) {
 // =============================================================================
 
 /**
- * Executes the DOM adaptation loop using Ollama, iterating until no failing nodes remain.
+ * Executes the DOM adaptation loop using Ollama, iterating until no failing
+ * nodes remain. The loop polls the cancellation token between iterations and
+ * between actions, and propagates the associated AbortSignal into every LLM
+ * request so the in-flight fetch is cancelled immediately.
  *
  * @param {number} tabId - The target tab ID.
  * @param {string} requestText - The user request text.
  * @param {object} pageContextResult - Result from GET_PAGE_CONTEXT.
  * @param {string|null} presetId - Preset identifier (if any).
- * @returns {Promise<{summary: string, iterations: number, totalActions: number, uniqueNodesModified: number, complete: boolean}>}
+ * @param {{ cancelled: boolean, controller: AbortController } | null} token - Cancellation token.
+ * @returns {Promise<object>} Adaptation result summary.
  */
-async function performDomAdaptation(tabId, requestText, pageContextResult, presetId = null) {
+async function performDomAdaptation(
+  tabId,
+  requestText,
+  pageContextResult,
+  presetId = null,
+  token = null
+) {
   let appliedActions = [];
   let hasPreviousActions = false;
   let previousActionsSummary = '';
@@ -161,8 +224,16 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
   let lastSummary = '';
 
   const isHighContrast = presetId === 'high_contrast';
+  const signal = token?.controller?.signal ?? null;
 
   for (let iteration = 1; iteration <= MAX_DOM_ADAPTATION_STEPS; iteration++) {
+    if (isCancelled(token)) {
+      if (DEBUG) {
+        console.log('[user-request] Cancellation observed before iteration', iteration);
+      }
+      break;
+    }
+
     totalIterations = iteration;
     if (DEBUG) {
       console.log(`[user-request] === Iteration ${iteration} of ${MAX_DOM_ADAPTATION_STEPS} ===`);
@@ -180,6 +251,10 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
       console.warn('[user-request] Could not refresh page snapshot; using previous.');
     }
 
+    if (isCancelled(token)) {
+      break;
+    }
+
     // Get all failing nodes
     let allFailingNodeIds = [];
     if (isHighContrast) {
@@ -187,7 +262,9 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
       const failingSubset = allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION);
       if (DEBUG) {
         console.log(`[user-request] Total failing nodes found: ${allFailingNodeIds.length}`);
-        console.log(`[user-request] Passing ${failingSubset.length} failing nodes to LLM (out of ${allFailingNodeIds.length})`);
+        console.log(
+          `[user-request] Passing ${failingSubset.length} failing nodes to LLM (out of ${allFailingNodeIds.length})`
+        );
       }
       if (allFailingNodeIds.length === 0) {
         if (DEBUG) {
@@ -217,9 +294,19 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
         presetId,
         hasPreviousActions,
         previousActionsSummary,
-        failingNodeIds: isHighContrast ? allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION) : [],
+        failingNodeIds: isHighContrast
+          ? allFailingNodeIds.slice(0, MAX_FAILING_NODES_PER_ITERATION)
+          : [],
+        signal,
       });
     } catch (error) {
+      // Aborted requests stop immediately without falling back.
+      if (error.name === 'AbortError' || isCancelled(token)) {
+        if (DEBUG) {
+          console.log('[user-request] Adaptation aborted.');
+        }
+        break;
+      }
       console.error('[user-request] LLM adaptation failed:', error);
       if (isHighContrast) {
         console.warn('[user-request] Falling back to built-in high-contrast adaptation.');
@@ -230,13 +317,20 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
           totalActions: appliedActions.length,
           uniqueNodesModified: modifiedNodeIds.size,
           complete: true,
+          cancelled: false,
         };
       }
       throw error;
     }
 
+    if (isCancelled(token)) {
+      break;
+    }
+
     if (DEBUG) {
-      console.log(`[user-request] Plan complete: ${adaptationPlan.complete}, actions: ${adaptationPlan.actions.length}`);
+      console.log(
+        `[user-request] Plan complete: ${adaptationPlan.complete}, actions: ${adaptationPlan.actions.length}`
+      );
       if (adaptationPlan.actions.length === 0) {
         console.warn('[user-request] LLM generated zero actions. Falling back to fallback?');
         if (isHighContrast) {
@@ -248,27 +342,37 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
             totalActions: appliedActions.length,
             uniqueNodesModified: modifiedNodeIds.size,
             complete: true,
+            cancelled: false,
           };
         }
       }
       if (adaptationPlan.actions.length > 0) {
-        console.log('[user-request] Actions:', JSON.stringify(adaptationPlan.actions, null, 2));
+        console.log(
+          '[user-request] Actions:',
+          JSON.stringify(adaptationPlan.actions, null, 2)
+        );
       }
     }
 
-    // Store the summary from this plan
     if (adaptationPlan.summary) {
       lastSummary = adaptationPlan.summary;
     }
 
-    // Apply actions with per-iteration limit
     let actions = adaptationPlan.actions;
     if (actions.length > MAX_ACTIONS_PER_ITERATION) {
-      console.warn(`Truncating actions from ${actions.length} to ${MAX_ACTIONS_PER_ITERATION}`);
+      console.warn(
+        `Truncating actions from ${actions.length} to ${MAX_ACTIONS_PER_ITERATION}`
+      );
       actions = actions.slice(0, MAX_ACTIONS_PER_ITERATION);
     }
 
     for (const action of actions) {
+      if (isCancelled(token)) {
+        if (DEBUG) {
+          console.log('[user-request] Cancellation observed while applying actions.');
+        }
+        break;
+      }
       if (DEBUG) {
         console.log(`[user-request] Executing action: ${action.action} on node ${action.nodeId}`);
       }
@@ -288,7 +392,13 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
     appliedActions = appliedActions.concat(actions);
 
     if (appliedActions.length > MAX_TOTAL_ACTIONS) {
-      throw new Error(`Circuit breaker: applied ${appliedActions.length} actions, exceeding limit.`);
+      throw new Error(
+        `Circuit breaker: applied ${appliedActions.length} actions, exceeding limit.`
+      );
+    }
+
+    if (isCancelled(token)) {
+      break;
     }
 
     if (actions.length === 0) {
@@ -297,17 +407,21 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
     }
 
     if (!isHighContrast) break;
-    // For high-contrast, loop continues while there are failing nodes.
   }
 
   if (DEBUG) {
-    console.log(`[user-request] Total iterations: ${totalIterations}, total actions: ${appliedActions.length}`);
+    console.log(
+      `[user-request] Total iterations: ${totalIterations}, total actions: ${appliedActions.length}`
+    );
     console.log(`[user-request] Unique nodes modified: ${modifiedNodeIds.size}`);
   }
 
-  // If no summary was captured, generate a default one
+  const cancelled = isCancelled(token);
+
   if (!lastSummary) {
-    if (appliedActions.length > 0) {
+    if (cancelled) {
+      lastSummary = 'Request cancelled by user.';
+    } else if (appliedActions.length > 0) {
       lastSummary = `Applied ${appliedActions.length} DOM changes to adapt the page.`;
     } else {
       lastSummary = 'No changes were needed.';
@@ -319,7 +433,8 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
     iterations: totalIterations,
     totalActions: appliedActions.length,
     uniqueNodesModified: modifiedNodeIds.size,
-    complete: true,
+    complete: !cancelled,
+    cancelled,
   };
 }
 
@@ -331,11 +446,31 @@ async function performDomAdaptation(tabId, requestText, pageContextResult, prese
  * Handles a user request by routing it to the appropriate action.
  *
  * @param {object} message - The user request message.
- * @param {chrome.tabs.Tab} [providedTab] - Optional tab object, used for context menu actions.
+ * @param {chrome.tabs.Tab} [providedTab] - Optional tab object.
  * @returns {Promise<object>} Response containing ok, request, and responseText.
- * @throws Will throw if the active tab cannot be determined or if injection fails.
  */
 export async function handleUserRequest(message, providedTab = null) {
+  const requestId = message?.payload?.requestId || null;
+  const token = registerRequestToken(requestId);
+
+  try {
+    return await executeUserRequest(message, providedTab, token);
+  } finally {
+    releaseRequestToken(requestId);
+  }
+}
+
+/**
+ * Executes a user request. Extracted from the public entry point so the
+ * request token can be released in a single place regardless of how the
+ * request settles.
+ *
+ * @param {object} message - The user request message.
+ * @param {chrome.tabs.Tab | null} providedTab - Optional tab object.
+ * @param {{ cancelled: boolean, controller: AbortController } | null} token
+ * @returns {Promise<object>} Response containing ok, request, and responseText.
+ */
+async function executeUserRequest(message, providedTab, token) {
   if (DEBUG) {
     console.log('[user-request] handleUserRequest called with message:', message);
   }
@@ -373,7 +508,7 @@ export async function handleUserRequest(message, providedTab = null) {
 
   await chrome.storage.local.set({ [STORAGE_KEY]: request });
 
-  // --- Natural language or high-contrast preset → DOM adaptation via LLM ---
+  // --- Natural language or high-contrast preset -> DOM adaptation via LLM ---
   if (
     message.payload.mode === 'natural_language' ||
     (message.payload.mode === 'preset' && message.payload.presetId === 'high_contrast')
@@ -387,7 +522,13 @@ export async function handleUserRequest(message, providedTab = null) {
 
     const requestText = message.payload.request;
     const presetId = message.payload.presetId || null;
-    const result = await performDomAdaptation(tab.id, requestText, pageContextResult, presetId);
+    const result = await performDomAdaptation(
+      tab.id,
+      requestText,
+      pageContextResult,
+      presetId,
+      token
+    );
 
     return {
       ok: true,
@@ -396,7 +537,7 @@ export async function handleUserRequest(message, providedTab = null) {
     };
   }
 
-  // --- Preset: simplify → LLM-driven node classification ---
+  // --- Preset: simplify -> LLM-driven node classification ---
   if (message.payload.mode === 'preset' && message.payload.presetId === 'simplify') {
     const pageContextResult = await sendToContentScript(tab.id, {
       type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
@@ -405,7 +546,7 @@ export async function handleUserRequest(message, providedTab = null) {
       throw new Error(pageContextResult?.error || t('error.send_to_tab'));
     }
 
-    const result = await performSimplify(tab.id, pageContextResult);
+    const result = await performSimplify(tab.id, pageContextResult, token);
     return {
       ok: true,
       request,
@@ -415,7 +556,6 @@ export async function handleUserRequest(message, providedTab = null) {
 
   // --- Preset: summarize ---
   if (message.payload.presetId === 'summarize') {
-    // Get page context (text and title)
     const pageContextResult = await sendToContentScript(tab.id, {
       type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
     });
@@ -423,7 +563,10 @@ export async function handleUserRequest(message, providedTab = null) {
       throw new Error(pageContextResult?.error || t('error.send_to_tab'));
     }
     const { text, title } = pageContextResult.context;
-    const summaryResult = await handleSummarize({ text, title });
+    const summaryResult = await handleSummarize(
+      { text, title },
+      token?.controller?.signal ?? null
+    );
     if (!summaryResult.ok) {
       throw new Error(summaryResult.error || 'Failed to summarize.');
     }
@@ -434,7 +577,7 @@ export async function handleUserRequest(message, providedTab = null) {
     };
   }
 
-  // --- Other presets (translate) → simple transformations ---
+  // --- Other presets (translate) -> simple transformations ---
   await sendToContentScript(tab.id, {
     type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
     payload: {
@@ -443,11 +586,11 @@ export async function handleUserRequest(message, providedTab = null) {
     },
   });
 
-  // Generate a fixed response text for these presets
   let responseText = '';
   switch (message.payload.presetId) {
     case 'translate':
-      responseText = t('notification.translated') || 'I have translated the page to Spanish.';
+      responseText =
+        t('notification.translated') || 'I have translated the page to Spanish.';
       break;
     default:
       responseText = t('popup.status.success') || 'Request applied.';

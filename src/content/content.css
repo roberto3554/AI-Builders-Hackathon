@@ -397,16 +397,16 @@
 }
 
 .page-adapter-chat-send svg {
-  width: 18px;
-  height: 18px;
+  width: 21px;
+  height: 21px;
   display: block;
   stroke: currentColor;
   fill: none;
 }
 
 .page-adapter-chat-stop svg {
-  width: 14px;
-  height: 14px;
+  width: 28px;
+  height: 28px;
   display: block;
   fill: currentColor;
   stroke: none;

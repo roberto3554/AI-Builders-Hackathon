@@ -20,9 +20,6 @@ const MAX_TEXT_PREVIEW = 80;
 const MAX_REASON_LENGTH = 120;
 const MAX_SUMMARY_LENGTH = 400;
 
-// Batches are formed from container groups. A group is split only if it
-// exceeds MAX_BATCH_SIZE, so small containers are kept whole and large ones
-// (a long footer list, a long article body) are chunked predictably.
 const MAX_BATCH_SIZE = 8;
 const MAX_BATCH_ATTEMPTS = 3;
 const MAX_SPLIT_DEPTH = 3;
@@ -55,19 +52,21 @@ const SYSTEM_PROMPT = [
  * Produces a compact, single-sentence description of the page purpose.
  *
  * @param {{text: string, title: string}} context - The page context.
+ * @param {AbortSignal|null} signal - Optional abort signal.
  * @returns {Promise<string>} A short description, or an empty string.
  */
-async function getPageDescription(context) {
+async function getPageDescription(context, signal = null) {
   try {
-    const result = await handleSummarize({ text: context.text, title: context.title });
+    const result = await handleSummarize({ text: context.text, title: context.title }, signal);
     if (!result?.ok || !result.summary) {
       return '';
     }
-    const firstSentence = result.summary
-      .replace(/\s+/g, ' ')
-      .split(/(?<=[.!?])\s/)[0];
+    const firstSentence = result.summary.replace(/\s+/g, ' ').split(/(?<=[.!?])\s/)[0];
     return firstSentence.slice(0, 200).trim();
   } catch (error) {
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      throw error;
+    }
     console.warn('[simplify] Page description generation failed:', error.message);
     return '';
   }
@@ -79,9 +78,7 @@ async function getPageDescription(context) {
 
 /**
  * Groups candidates by their nearest semantic container, preserving document
- * order. Candidates that share a container end up in the same group even if
- * they are not contiguous in the DFS order (this is rare in practice, since
- * the snapshot is depth-first, but the grouping is robust to it).
+ * order.
  *
  * @param {Array<object>} candidates - The ordered candidate list.
  * @returns {Array<{containerId: string, containerLabel: string, items: Array<object>}>}
@@ -109,11 +106,9 @@ function groupCandidatesByContainer(candidates) {
 }
 
 /**
- * Splits container groups into batches. A group that fits within
- * MAX_BATCH_SIZE becomes one batch; a larger group is chunked. Group order is
- * preserved so the batches follow the page structure top to bottom.
+ * Splits container groups into batches.
  *
- * @param {Array<{containerId: string, containerLabel: string, items: Array<object>}>} groups
+ * @param {Array<object>} groups
  * @returns {Array<{containerLabel: string, items: Array<object>}>}
  */
 function buildBatches(groups) {
@@ -148,13 +143,9 @@ function formatCandidateLine(candidate, index) {
 }
 
 /**
- * Builds the per-batch prompt. Includes the container label so the model can
- * reason about the batch as a whole (e.g. "all of these are nav links").
+ * Builds the per-batch prompt.
  *
  * @param {object} params - Prompt parameters.
- * @param {string} params.description - One-line page description.
- * @param {string} params.containerLabel - Human-readable container label.
- * @param {Array<object>} params.candidates - The batch of candidate nodes.
  * @returns {string} The formatted prompt.
  */
 function buildBatchPrompt({ description, containerLabel, candidates }) {
@@ -284,9 +275,10 @@ function parseDecisions(responseText, candidates) {
  * @param {string} containerLabel - Container label for the batch.
  * @param {string} model - The Ollama model name.
  * @param {string} label - Human-readable batch label for logging.
+ * @param {AbortSignal|null} signal - Optional abort signal.
  * @returns {Promise<{decisions: Array<object>, hadContent: boolean}>}
  */
-async function runSingleBatch(batch, description, containerLabel, model, label) {
+async function runSingleBatch(batch, description, containerLabel, model, label, signal) {
   const prompt = buildBatchPrompt({
     description,
     containerLabel,
@@ -298,7 +290,8 @@ async function runSingleBatch(batch, description, containerLabel, model, label) 
     SYSTEM_PROMPT,
     model,
     BATCH_NUM_PREDICT,
-    false
+    false,
+    signal
   );
 
   if (DEBUG) {
@@ -321,6 +314,7 @@ async function runSingleBatch(batch, description, containerLabel, model, label) 
  * @param {string} model - The Ollama model name.
  * @param {string} label - Human-readable batch label.
  * @param {number} [depth=0] - Current split depth.
+ * @param {AbortSignal|null} signal - Optional abort signal.
  * @returns {Promise<Array<object>>} The accumulated decisions.
  */
 async function runBatchWithFallback(
@@ -329,18 +323,26 @@ async function runBatchWithFallback(
   containerLabel,
   model,
   label,
-  depth = 0
+  depth = 0,
+  signal = null
 ) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_BATCH_ATTEMPTS; attempt++) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
     try {
       const result = await runSingleBatch(
         batch,
         description,
         containerLabel,
         model,
-        label
+        label,
+        signal
       );
 
       if (!result.hadContent) {
@@ -351,6 +353,9 @@ async function runBatchWithFallback(
 
       return result.decisions;
     } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error;
+      }
       lastError = error.message;
       console.warn(`[simplify] ${label} attempt ${attempt} failed: ${error.message}`);
     }
@@ -370,6 +375,11 @@ async function runBatchWithFallback(
   const merged = [];
 
   for (let i = 0; i < halves.length; i++) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
     const halfLabel = `${label}.${i + 1}`;
     const halfResult = await runBatchWithFallback(
       halves[i],
@@ -377,7 +387,8 @@ async function runBatchWithFallback(
       containerLabel,
       model,
       halfLabel,
-      depth + 1
+      depth + 1,
+      signal
     );
     merged.push(...halfResult);
   }
@@ -394,13 +405,15 @@ async function runBatchWithFallback(
  *
  * @param {number} tabId - The target tab ID.
  * @param {object} pageContextResult - The result from GET_PAGE_CONTEXT.
+ * @param {{ cancelled: boolean, controller: AbortController } | null} [token=null]
  * @returns {Promise<object>} The simplification result summary.
  */
-export async function performSimplify(tabId, pageContextResult) {
+export async function performSimplify(tabId, pageContextResult, token = null) {
   const context = pageContextResult.context;
+  const signal = token?.controller?.signal ?? null;
 
   const [description, candidatesResponse] = await Promise.all([
-    getPageDescription(context),
+    getPageDescription(context, signal),
     sendToContentScript(tabId, {
       type: MESSAGE_TYPES.GET_SIMPLIFY_CANDIDATES,
     }),
@@ -448,15 +461,32 @@ export async function performSimplify(tabId, pageContextResult) {
   }
 
   for (let i = 0; i < batches.length; i++) {
+    if (token?.cancelled) {
+      if (DEBUG) {
+        console.debug('[simplify] Cancellation observed before batch', i + 1);
+      }
+      break;
+    }
+
     const batch = batches[i];
     const label = `Batch ${i + 1}/${batches.length}`;
-    const decisions = await runBatchWithFallback(
-      batch.items,
-      description,
-      batch.containerLabel,
-      model,
-      label
-    );
+    let decisions;
+    try {
+      decisions = await runBatchWithFallback(
+        batch.items,
+        description,
+        batch.containerLabel,
+        model,
+        label,
+        0,
+        signal
+      );
+    } catch (error) {
+      if (error.name === 'AbortError' || token?.cancelled) {
+        break;
+      }
+      throw error;
+    }
 
     for (const decision of decisions) {
       if (!validIds.has(decision.nodeId)) {
@@ -487,6 +517,15 @@ export async function performSimplify(tabId, pageContextResult) {
     }
   }
 
+  if (token?.cancelled) {
+    return {
+      summary: 'Request cancelled by user.',
+      totalCandidates: candidates.length,
+      totalHidden: 0,
+      totalSummarized: 0,
+    };
+  }
+
   if (toRemove.size === 0 && toSummarize.size === 0) {
     return {
       summary: t('simplify.no_changes'),
@@ -498,6 +537,7 @@ export async function performSimplify(tabId, pageContextResult) {
 
   let summarizedCount = 0;
   for (const [nodeId, text] of toSummarize) {
+    if (token?.cancelled) break;
     try {
       const result = await sendToContentScript(tabId, {
         payload: { action: 'set_text', nodeId, text },
@@ -513,6 +553,7 @@ export async function performSimplify(tabId, pageContextResult) {
 
   let hiddenCount = 0;
   for (const nodeId of toRemove) {
+    if (token?.cancelled) break;
     try {
       const result = await sendToContentScript(tabId, {
         payload: { action: 'hide_node', nodeId },
@@ -533,11 +574,15 @@ export async function performSimplify(tabId, pageContextResult) {
     );
   }
 
+  const cancelled = Boolean(token?.cancelled);
+
   return {
-    summary: t('simplify.summary_updated', {
-      hidden: hiddenCount,
-      summarized: summarizedCount,
-    }),
+    summary: cancelled
+      ? 'Request cancelled by user.'
+      : t('simplify.summary_updated', {
+          hidden: hiddenCount,
+          summarized: summarizedCount,
+        }),
     totalCandidates: candidates.length,
     totalHidden: hiddenCount,
     totalSummarized: summarizedCount,
