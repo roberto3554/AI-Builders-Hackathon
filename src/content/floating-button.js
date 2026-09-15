@@ -1,20 +1,36 @@
 /**
  * @fileoverview Creates a draggable floating circular button that expands
  * into a vertical quick-action menu. Each quick-action icon triggers its
- * preset directly; the bottom arrow opens the main menu window.
+ * preset directly; presets that require free-form input open a compact
+ * input panel; presets that produce a preview (summarize) keep the menu
+ * open and display a result panel once the request completes. While any
+ * quick action is running, a rotating ring is shown around the floating
+ * button until the request settles. Clicking the button while a quick
+ * action is running cancels that action instead of toggling the menu.
  * Dependencies: chrome.runtime, chrome.storage, shared/constants.js,
- *               shared/locale.js, shared/messages.js, menu-window.js.
+ *               shared/locale.js, shared/messages.js, menu-window.js,
+ *               quick-action-input.js.
  * Used by: content.js.
  */
 
-import { PRESETS } from '../shared/constants.js';
+import { PRESETS, MESSAGE_TYPES } from '../shared/constants.js';
 import { t } from '../shared/locale.js';
 import { createUserRequest } from '../shared/messages.js';
 import { createMenuWindow } from './menu-window.js';
+import {
+  openQuickActionInput,
+  openQuickActionResult,
+  closeQuickActionInput,
+  isQuickActionInputOpen,
+  getQuickActionInputPresetId,
+  getQuickActionInputElement,
+} from './quick-action-input.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
+
+const DEBUG = false;
 
 const STORAGE_KEY = 'pageAdapter:buttonPosition';
 const DRAG_THRESHOLD = 5;
@@ -25,9 +41,10 @@ const QUICK_MENU_BUTTON_SIZE = 48;
 const QUICK_MENU_GAP = 8;
 const QUICK_MENU_MARGIN = 8;
 const QUICK_MENU_STAGGER_MS = 45;
-const QUICK_MENU_OPEN_ANIMATION_MS = 300;
 const QUICK_MENU_CLOSE_ANIMATION_MS = 220;
 const QUICK_MENU_CLOSE_BUFFER_MS = 20;
+
+const PRESET_ID_SUMMARIZE = 'summarize';
 
 // =============================================================================
 // Module state
@@ -36,6 +53,34 @@ const QUICK_MENU_CLOSE_BUFFER_MS = 20;
 let quickMenuElement = null;
 let quickMenuOutsideHandler = null;
 let quickMenuCloseTimeoutId = null;
+let activeRequestCount = 0;
+
+/**
+ * Tracks every in-flight quick-menu request by its request identifier.
+ * The entry records whether the request has been cancelled so the caller
+ * can suppress any late result panel. Using a Map (rather than a Set)
+ * keeps the state self-contained per request.
+ *
+ * @type {Map<string, {cancelled: boolean, presetId: string}>}
+ */
+const activeRequests = new Map();
+
+// =============================================================================
+// Identifier helpers
+// =============================================================================
+
+/**
+ * Generates a unique identifier used to correlate a request with its
+ * cancellation message. Uses crypto.randomUUID when available.
+ *
+ * @returns {string} A random request identifier.
+ */
+function generateRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 // =============================================================================
 // Position persistence helpers
@@ -158,6 +203,86 @@ function computeQuickMenuPosition(button, itemCount) {
 }
 
 // =============================================================================
+// Loading indicator
+// =============================================================================
+
+/**
+ * Shows the loading ring around the floating button. Multiple concurrent
+ * requests are supported: the ring remains visible until the last one
+ * settles.
+ *
+ * @param {HTMLElement} button - The floating button element.
+ * @returns {void}
+ */
+function startButtonLoading(button) {
+  activeRequestCount += 1;
+  button.dataset.loading = 'true';
+  button.setAttribute('aria-busy', 'true');
+}
+
+/**
+ * Removes one loading count. The ring is hidden only when no request is
+ * outstanding.
+ *
+ * @param {HTMLElement} button - The floating button element.
+ * @returns {void}
+ */
+function stopButtonLoading(button) {
+  activeRequestCount = Math.max(0, activeRequestCount - 1);
+  if (activeRequestCount === 0) {
+    button.dataset.loading = 'false';
+    button.removeAttribute('aria-busy');
+  }
+}
+
+/**
+ * Reports whether any quick-menu request is currently in flight.
+ *
+ * @returns {boolean} True when at least one request is running.
+ */
+function hasActiveRequests() {
+  return activeRequests.size > 0 || activeRequestCount > 0;
+}
+
+// =============================================================================
+// Request cancellation
+// =============================================================================
+
+/**
+ * Cancels every in-flight quick-menu request. Each request is marked as
+ * cancelled locally so that any late response is suppressed, and the
+ * background service worker is notified so it can abort the underlying
+ * operation.
+ *
+ * @returns {Promise<void>}
+ */
+async function cancelActiveRequests() {
+  if (activeRequests.size === 0) {
+    return;
+  }
+
+  const entries = [...activeRequests.entries()];
+  if (DEBUG) {
+    console.debug(
+      '[Page Adapter] Cancelling active quick-action requests:',
+      entries.map(([id]) => id)
+    );
+  }
+
+  for (const [requestId, entry] of entries) {
+    entry.cancelled = true;
+    try {
+      await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.CANCEL_REQUEST,
+        payload: { requestId },
+      });
+    } catch (error) {
+      console.warn('[Page Adapter] Failed to cancel request:', error);
+    }
+  }
+}
+
+// =============================================================================
 // Quick-menu behaviour
 // =============================================================================
 
@@ -168,24 +293,21 @@ function prefersReducedMotion() {
 /**
  * Closes the quick menu, playing a top-to-bottom staggered exit animation
  * before the element is removed from the DOM.
+ *
+ * @returns {void}
  */
 function closeQuickMenu() {
   if (!quickMenuElement) {
     return;
   }
 
-  // The outside click handler is removed as soon as the close begins; the
-  // menu is logically dismissed even while the exit animation is running.
   if (quickMenuOutsideHandler) {
     document.removeEventListener('click', quickMenuOutsideHandler, true);
     quickMenuOutsideHandler = null;
   }
 
   const menu = quickMenuElement;
-  const items = [...menu.querySelectorAll('.page-adapter-quick-menu-button')];
 
-  // If a previous close is already in progress, finalize it immediately so
-  // the state stays consistent even on rapid re-toggles.
   if (quickMenuCloseTimeoutId) {
     clearTimeout(quickMenuCloseTimeoutId);
     quickMenuCloseTimeoutId = null;
@@ -208,12 +330,13 @@ function closeQuickMenu() {
     quickMenuCloseTimeoutId = null;
   };
 
+  const items = [...menu.querySelectorAll('.page-adapter-quick-menu-button')];
+
   if (items.length === 0 || prefersReducedMotion()) {
     finalize();
     return;
   }
 
-  // Reverse the cascade so the bottom-most item closes first.
   const lastIndex = items.length - 1;
   items.forEach((item, index) => {
     item.style.animationDelay = `${(lastIndex - index) * QUICK_MENU_STAGGER_MS}ms`;
@@ -227,28 +350,57 @@ function closeQuickMenu() {
 }
 
 /**
- * Sends a preset request to the background service worker.
+ * Sends a preset request to the background service worker and resolves
+ * with the response. A fresh request identifier is attached so the request
+ * follows the same path as those dispatched from the popup and menu
+ * window, and so it can be cancelled by the floating button.
  *
  * @param {object} preset - The preset definition.
- * @returns {Promise<void>}
+ * @param {string|null} [requestOverride=null] - Optional request text that
+ *   replaces the preset's default request (used for input-driven presets).
+ * @returns {Promise<object>} The response from the background service worker.
  */
-async function sendPresetRequest(preset) {
+async function sendPresetRequest(preset, requestOverride = null) {
+  const requestId = generateRequestId();
   const message = createUserRequest({
     mode: 'preset',
-    request: preset.request,
+    request: requestOverride || preset.request,
     presetId: preset.id,
   });
+  message.payload.requestId = requestId;
+
+  const entry = { cancelled: false, presetId: preset.id };
+  activeRequests.set(requestId, entry);
+
+  if (DEBUG) {
+    console.debug(`[Page Adapter] Dispatching preset "${preset.id}".`, message);
+  }
 
   try {
     const response = await chrome.runtime.sendMessage(message);
+
+    if (entry.cancelled) {
+      return { ok: false, cancelled: true, error: 'Request cancelled' };
+    }
+
+    if (DEBUG) {
+      console.debug(`[Page Adapter] Response for "${preset.id}".`, response);
+    }
     if (!response?.ok) {
       console.warn(
         `[Page Adapter] Preset "${preset.id}" failed:`,
         response?.error || 'Unknown error'
       );
     }
+    return response;
   } catch (error) {
+    if (entry.cancelled) {
+      return { ok: false, cancelled: true, error: 'Request cancelled' };
+    }
     console.error(`[Page Adapter] Failed to send preset "${preset.id}":`, error);
+    return { ok: false, error: error?.message || 'Message dispatch failed' };
+  } finally {
+    activeRequests.delete(requestId);
   }
 }
 
@@ -257,13 +409,13 @@ async function sendPresetRequest(preset) {
  * wrapper and a hidden label that is revealed on hover.
  *
  * @param {object} params - The button parameters.
- * @param {string|null} params.iconPath - Absolute URL of the icon, or null.
+ * @param {string|null} params.iconSvg - Preset icon markup, or null.
  * @param {string} params.ariaLabel - Accessible label for screen readers.
  * @param {string} params.visibleText - Visible label revealed on hover.
  * @param {function(): void} params.onClick - Click callback.
- * @returns {Promise<HTMLButtonElement>} The built button.
+ * @returns {HTMLButtonElement} The built button.
  */
-async function buildQuickMenuButton({ iconPath, ariaLabel, visibleText, onClick }) {
+function buildQuickMenuButton({ iconSvg, ariaLabel, visibleText, onClick }) {
   const item = document.createElement('button');
   item.type = 'button';
   item.className = 'page-adapter-quick-menu-button';
@@ -274,9 +426,8 @@ async function buildQuickMenuButton({ iconPath, ariaLabel, visibleText, onClick 
   iconWrapper.className = 'page-adapter-quick-menu-button__icon';
   iconWrapper.setAttribute('aria-hidden', 'true');
 
-  const svgContent = iconPath ? await loadSvgContent(iconPath) : null;
-  if (svgContent) {
-    iconWrapper.innerHTML = svgContent;
+  if (iconSvg) {
+    iconWrapper.innerHTML = iconSvg;
   } else {
     iconWrapper.textContent = (ariaLabel.charAt(0) || '?').toUpperCase();
   }
@@ -296,15 +447,154 @@ async function buildQuickMenuButton({ iconPath, ariaLabel, visibleText, onClick 
 }
 
 /**
- * Toggles the quick-action menu. If the menu is open, it is closed; if it
- * is closed, it is built and shown next to the floating button.
+ * Runs a preset request while keeping the loading indicator and the
+ * active-request registry in sync. The loading ring is started before any
+ * await so the browser paints it in the same frame as the click, and it
+ * remains visible until the promise settles.
+ *
+ * @param {object} preset - The preset definition.
+ * @param {string|null} requestOverride - Optional request text override.
+ * @param {HTMLElement} floatingButton - The floating button element.
+ * @returns {Promise<object>} The background response.
+ */
+async function runPresetRequest(preset, requestOverride, floatingButton) {
+  startButtonLoading(floatingButton);
+  try {
+    return await sendPresetRequest(preset, requestOverride);
+  } finally {
+    stopButtonLoading(floatingButton);
+  }
+}
+
+/**
+ * Handles a click on a quick-menu preset entry. Behaviour varies by preset:
+ *
+ * - Presets that require free-form input open an inline input panel and
+ *   leave the menu visible. The request itself runs from the panel's
+ *   submit handler so the loading ring appears as soon as the query is
+ *   confirmed.
+ * - The summarize preset keeps the menu open while the request is running
+ *   and displays a result panel once the summary is ready.
+ * - Every other preset closes the menu immediately and dispatches the
+ *   request. A rotating ring on the floating button indicates progress and
+ *   stays visible until the request settles.
+ *
+ * @param {object} preset - The preset definition.
+ * @param {HTMLButtonElement} anchor - The quick-menu entry element.
+ * @param {string|null} iconSvg - Preset icon markup, or null.
+ * @param {string} localizedLabel - Localized preset label.
+ * @param {ShadowRoot} shadowRoot - The shadow root that hosts the UI.
+ * @param {HTMLButtonElement} floatingButton - The floating button element.
+ * @returns {Promise<void>}
+ */
+async function handlePresetClick(
+  preset,
+  anchor,
+  iconSvg,
+  localizedLabel,
+  shadowRoot,
+  floatingButton
+) {
+  if (anchor.dataset.paRunning === 'true') {
+    return;
+  }
+
+  // --- Presets that require free-form input ---
+  if (preset.requiresInput) {
+    if (
+      isQuickActionInputOpen() &&
+      getQuickActionInputPresetId() === preset.id
+    ) {
+      closeQuickActionInput({ restoreFocus: true });
+      return;
+    }
+    openQuickActionInput({
+      anchor,
+      shadowRoot,
+      presetId: preset.id,
+      iconSvg,
+      title: localizedLabel,
+      placeholder: t('search.input_placeholder'),
+      inputAriaLabel: t('search.input_label'),
+      submitAriaLabel: t('search.submit_button'),
+      closeAriaLabel: t('popup.cancel_button'),
+      onSubmit: (value) => {
+        closeQuickMenu();
+        floatingButton.setAttribute('aria-expanded', 'false');
+        // Fire-and-forget: the loading ring is toggled around the request
+        // so it stays visible for the entire duration of the search.
+        runPresetRequest(preset, value, floatingButton);
+      },
+    });
+    return;
+  }
+
+  // --- Standard dispatch path ---
+  const keepMenuOpen = preset.id === PRESET_ID_SUMMARIZE;
+
+  anchor.dataset.paRunning = 'true';
+
+  if (!keepMenuOpen) {
+    closeQuickActionInput();
+    closeQuickMenu();
+    floatingButton.setAttribute('aria-expanded', 'false');
+  }
+
+  let response = null;
+  try {
+    response = await runPresetRequest(preset, null, floatingButton);
+  } finally {
+    anchor.dataset.paRunning = 'false';
+  }
+
+  if (!keepMenuOpen) {
+    return;
+  }
+
+  // If the user cancelled the request, do not open the result panel: the
+  // menu and any open panel have already been dismissed by the cancel
+  // handler on the floating button.
+  if (response?.cancelled) {
+    return;
+  }
+
+  // The anchor may have been detached if the user closed the menu while
+  // the request was in flight. In that case the floating button is used
+  // as a stable anchor so the panel still appears in a sensible place.
+  const resultAnchor = anchor.isConnected ? anchor : floatingButton;
+  const hasResult =
+    response?.ok &&
+    typeof response.responseText === 'string' &&
+    response.responseText.trim().length > 0;
+
+  if (hasResult) {
+    openQuickActionResult({
+      anchor: resultAnchor,
+      shadowRoot,
+      presetId: preset.id,
+      iconSvg,
+      title: localizedLabel,
+      content: response.responseText,
+      closeAriaLabel: t('popup.cancel_button'),
+    });
+  } else {
+    closeQuickMenu();
+    floatingButton.setAttribute('aria-expanded', 'false');
+  }
+}
+
+/**
+ * Toggles the quick-action menu. If the menu or its input panel is open,
+ * both are dismissed; otherwise the menu is built and shown next to the
+ * floating button.
  *
  * @param {HTMLElement} button - The floating button element.
  * @param {ShadowRoot} shadowRoot - The shadow root that hosts the UI.
  * @returns {Promise<void>}
  */
 async function toggleQuickMenu(button, shadowRoot) {
-  if (quickMenuElement) {
+  if (quickMenuElement || isQuickActionInputOpen()) {
+    closeQuickActionInput();
     closeQuickMenu();
     button.setAttribute('aria-expanded', 'false');
     return;
@@ -319,20 +609,26 @@ async function toggleQuickMenu(button, shadowRoot) {
   menu.style.left = `${position.left}px`;
   menu.style.top = `${position.top}px`;
 
-  // Collect all buttons so their stagger delay can be assigned in order.
   const menuItems = [];
 
   for (const preset of PRESETS) {
     const iconUrl = chrome.runtime.getURL(preset.icon);
+    const iconSvg = await loadSvgContent(iconUrl);
     const localizedLabel = t(`preset.${preset.id}`);
-    const presetItem = await buildQuickMenuButton({
-      iconPath: iconUrl,
+
+    const presetItem = buildQuickMenuButton({
+      iconSvg,
       ariaLabel: localizedLabel,
       visibleText: localizedLabel,
       onClick: () => {
-        closeQuickMenu();
-        button.setAttribute('aria-expanded', 'false');
-        sendPresetRequest(preset);
+        handlePresetClick(
+          preset,
+          presetItem,
+          iconSvg,
+          localizedLabel,
+          shadowRoot,
+          button
+        );
       },
     });
     menu.appendChild(presetItem);
@@ -340,11 +636,13 @@ async function toggleQuickMenu(button, shadowRoot) {
   }
 
   const arrowIconUrl = chrome.runtime.getURL('src/assets/icons/arrow-left.svg');
-  const arrowItem = await buildQuickMenuButton({
-    iconPath: arrowIconUrl,
+  const arrowIconSvg = await loadSvgContent(arrowIconUrl);
+  const arrowItem = buildQuickMenuButton({
+    iconSvg: arrowIconSvg,
     ariaLabel: t('quick_menu.open_menu'),
     visibleText: t('quick_menu.open_menu'),
     onClick: () => {
+      closeQuickActionInput();
       closeQuickMenu();
       button.setAttribute('aria-expanded', 'false');
       createMenuWindow(button, shadowRoot);
@@ -354,8 +652,6 @@ async function toggleQuickMenu(button, shadowRoot) {
   menu.appendChild(arrowItem);
   menuItems.push(arrowItem);
 
-  // Apply a staggered animation delay to each item so the menu opens
-  // top-to-bottom in a cascade.
   menuItems.forEach((item, index) => {
     item.style.animationDelay = `${index * QUICK_MENU_STAGGER_MS}ms`;
   });
@@ -366,15 +662,19 @@ async function toggleQuickMenu(button, shadowRoot) {
 
   const handleOutsideClick = (event) => {
     const path = event.composedPath ? event.composedPath() : [event.target];
-    if (path.includes(button) || path.includes(menu)) {
+    const panel = getQuickActionInputElement();
+    if (
+      path.includes(button) ||
+      path.includes(menu) ||
+      (panel && path.includes(panel))
+    ) {
       return;
     }
+    closeQuickActionInput();
     closeQuickMenu();
     button.setAttribute('aria-expanded', 'false');
   };
 
-  // Delay listener registration so the click that opened the menu is
-  // not immediately captured as an outside click.
   setTimeout(() => {
     if (quickMenuElement === menu) {
       document.addEventListener('click', handleOutsideClick, true);
@@ -391,12 +691,12 @@ async function toggleQuickMenu(button, shadowRoot) {
  * Creates and injects the floating button into the shadow root.
  * The button can be dragged to a new position, and its position is
  * persisted. Clicking the button toggles a vertical quick-action menu.
+ * While a quick action is running, clicking the button cancels it.
  *
  * @param {ShadowRoot} shadowRoot - The shadow root that hosts the UI.
  * @returns {void}
  */
 export function createFloatingButton(shadowRoot) {
-  // Avoid duplicate injection.
   if (shadowRoot.querySelector('#extension-floating-button')) {
     return;
   }
@@ -408,10 +708,25 @@ export function createFloatingButton(shadowRoot) {
   button.setAttribute('title', 'Open Page Adapter');
   button.setAttribute('aria-expanded', 'false');
   button.type = 'button';
-  // Mark this element as part of the extension UI so it is ignored in snapshots.
   button.dataset.extension = 'true';
+  button.dataset.loading = 'false';
 
-  // Load the power SVG icon.
+  // The icon and the loading ring are permanent children of the button.
+  // Keeping them separate means the ring is never wiped when the icon
+  // finishes loading, and its visibility does not depend on pseudo-element
+  // stacking.
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'page-adapter-floating-button__icon';
+  iconSpan.setAttribute('aria-hidden', 'true');
+  button.appendChild(iconSpan);
+
+  const ringSpan = document.createElement('span');
+  ringSpan.className = 'page-adapter-floating-button__ring';
+  ringSpan.setAttribute('aria-hidden', 'true');
+  button.appendChild(ringSpan);
+
+  shadowRoot.appendChild(button);
+
   const powerIconUrl = chrome.runtime.getURL('src/assets/icons/accessibility.svg');
   fetch(powerIconUrl)
     .then((response) => {
@@ -419,19 +734,15 @@ export function createFloatingButton(shadowRoot) {
       return response.text();
     })
     .then((svg) => {
-      button.innerHTML = svg;
+      iconSpan.innerHTML = svg;
     })
     .catch(() => {
-      // Fallback: simple text.
-      button.textContent = '⏻';
+      iconSpan.textContent = '⏻';
     });
-
-  shadowRoot.appendChild(button);
 
   const defaultPosition = getDefaultButtonPosition(button);
   setButtonPosition(button, defaultPosition.left, defaultPosition.top);
 
-  // Restore saved position when available.
   loadButtonPosition().then((pos) => {
     if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
       if (isLegacyTopLeftPosition(pos)) {
@@ -489,9 +800,8 @@ export function createFloatingButton(shadowRoot) {
       (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)
     ) {
       hasMoved = true;
-      // Once a real drag begins, dismiss the quick menu so it does not
-      // visually trail behind the button.
-      if (quickMenuElement) {
+      if (quickMenuElement || isQuickActionInputOpen()) {
+        closeQuickActionInput();
         closeQuickMenu();
         button.setAttribute('aria-expanded', 'false');
       }
@@ -531,13 +841,24 @@ export function createFloatingButton(shadowRoot) {
       return;
     }
     event.preventDefault();
+
+    // While any quick action is running, the button acts as a cancel
+    // control: it dismisses the menu and any open panel and notifies the
+    // background to abort the request.
+    if (hasActiveRequests()) {
+      closeQuickActionInput();
+      closeQuickMenu();
+      button.setAttribute('aria-expanded', 'false');
+      cancelActiveRequests();
+      return;
+    }
+
     toggleQuickMenu(button, shadowRoot);
   }
 
   button.addEventListener('mousedown', onDragStart);
   button.addEventListener('click', onClick);
 
-  // Keep the quick menu aligned with the button on viewport resize.
   window.addEventListener('resize', () => {
     if (!quickMenuElement) {
       return;

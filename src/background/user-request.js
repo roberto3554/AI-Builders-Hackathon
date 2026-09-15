@@ -2,7 +2,7 @@
  * @fileoverview Handles user requests from popup or context menu.
  * Orchestrates tab retrieval, injection, and delegation to content script.
  * Dependencies: injection.js, shared/constants.js, shared/locale.js,
- *               simplify.js, ollama.js.
+ *               simplify.js, search.js, ollama.js.
  * Used by: message-handler.js, context-menu.js.
  */
 
@@ -19,6 +19,7 @@ import {
   handleSummarize,
 } from './ollama.js';
 import { performSimplify } from './simplify.js';
+import { performSearch } from './search.js';
 
 const STORAGE_KEY = 'pageAdapter:lastRequest';
 const DEBUG = true;
@@ -577,24 +578,28 @@ async function executeUserRequest(message, providedTab, token) {
     };
   }
 
-  // --- Other presets (translate) -> simple transformations ---
-  await sendToContentScript(tab.id, {
-    type: MESSAGE_TYPES.APPLY_TRANSFORMATION,
-    payload: {
-      presetId: message.payload.presetId,
-      request: message.payload.request,
-    },
-  });
+  // --- Preset: search -> LLM-driven element location and highlighting ---
+  if (message.payload.mode === 'preset' && message.payload.presetId === 'search') {
+    const pageContextResult = await sendToContentScript(tab.id, {
+      type: MESSAGE_TYPES.GET_PAGE_CONTEXT,
+    });
+    if (!pageContextResult?.ok) {
+      throw new Error(pageContextResult?.error || t('error.send_to_tab'));
+    }
 
-  let responseText = '';
-  switch (message.payload.presetId) {
-    case 'translate':
-      responseText =
-        t('notification.translated') || 'I have translated the page to Spanish.';
-      break;
-    default:
-      responseText = t('popup.status.success') || 'Request applied.';
+    const result = await performSearch(
+      tab.id,
+      pageContextResult,
+      message.payload.request,
+      token
+    );
+
+    return {
+      ok: true,
+      request,
+      responseText: result.summary,
+    };
   }
 
-  return { ok: true, request, responseText };
+  throw new Error(`Unknown preset: ${message.payload.presetId || '(none)'}`);
 }

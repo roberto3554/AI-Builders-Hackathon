@@ -44,9 +44,9 @@ export default {
   // Popup – Presets
   // ===========================================================================
   'preset.high_contrast': 'High contrast',
+  'preset.search': 'Search',
   'preset.simplify': 'Simplify',
   'preset.summarize': 'Summarize',
-  'preset.translate': 'Translate',
 
   // ===========================================================================
   // Popup – Info
@@ -80,7 +80,6 @@ export default {
   // ===========================================================================
   'notification.high_contrast': 'High contrast mode activated',
   'notification.simplified': 'Simplified mode activated',
-  'notification.translated': 'Language changed to Spanish (simulated)',
 
   // ===========================================================================
   // Background – Errors
@@ -100,4 +99,15 @@ export default {
   'simplify.summary_hidden': 'Simplified the page by hiding {{count}} non-essential element(s).',
   'simplify.summary_updated': 'Simplified the page by hiding {{hidden}} element(s) and shortening {{summarized}} element(s).',
   'simplify.no_changes': 'No changes were needed.',
+
+    // ===========================================================================
+  // Content – Search
+  // ===========================================================================
+  'search.no_query': 'Type what you are looking for in the input field, then click Search.',
+  'search.input_placeholder': 'What are you looking for?',
+  'search.input_label': 'Search query',
+  'search.submit_button': 'Search',
+  'search.summary_found': 'Highlighted {{count}} element(s) matching your query.',
+  'search.summary_not_found': 'No matching element was found on this page.',
+  'search.summary_cancelled': 'Search cancelled by user.',
 };

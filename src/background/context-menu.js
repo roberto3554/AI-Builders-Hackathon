@@ -33,6 +33,11 @@ export async function setupContextMenu() {
   });
 
   for (const preset of PRESETS) {
+    // Presets that require free-form input cannot be triggered from a
+    // context menu; they are exposed from the floating panel instead.
+    if (preset.requiresInput) {
+      continue;
+    }
     chrome.contextMenus.create({
       id: `preset_${preset.id}`,
       parentId: PARENT_MENU_ID,
@@ -77,7 +82,7 @@ export async function onContextMenuClicked(info, tab) {
   const presetId = match[1];
   const preset = PRESETS.find((p) => p.id === presetId);
 
-  if (!preset) {
+  if (!preset || preset.requiresInput) {
     return;
   }
 

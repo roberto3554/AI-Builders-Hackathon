@@ -1,7 +1,7 @@
 /**
  * @fileoverview Ollama API communication and AI helpers.
  * Dependencies: shared/locale.js, shared/preferences.js.
- * Used by: message-handler.js.
+ * Used by: message-handler.js, search.js.
  */
 
 import { t } from '../shared/locale.js';
@@ -34,6 +34,7 @@ const ALLOWED_DOM_ACTIONS = new Set([
 
 const DEBUG = false;
 const MAX_LLM_RESPONSE_RETRIES = 4;
+const MAX_SEARCH_RETRIES = 2;
 
 // =============================================================================
 // Response Validation Constants
@@ -61,6 +62,10 @@ const ACTION_SCHEMA = {
       'margin',
       'display',
       'visibility',
+      'outline',
+      'outlineOffset',
+      'textDecoration',
+      'textShadow',
     ],
   },
   attributes: { type: 'object', required: false },
@@ -682,6 +687,212 @@ function buildDomAdaptationPrompt({
     '- Do not include code fences or commentary outside JSON.',
     '- Avoid removing or hiding nodes unless explicitly requested and safe.',
   ].join('\n');
+}
+
+// =============================================================================
+// Search prompt
+// =============================================================================
+
+/**
+ * Formats a single search candidate as one input line for the segment prompt.
+ *
+ * @param {object} candidate - The candidate descriptor.
+ * @returns {string} The formatted line.
+ */
+function formatSearchCandidateLine(candidate) {
+  const tag = (candidate.tagName || 'div').toLowerCase();
+  const descriptors = [];
+  if (candidate.role) descriptors.push(`role="${candidate.role}"`);
+  if (candidate.href) descriptors.push(`href="${candidate.href}"`);
+  if (candidate.ariaLabel) descriptors.push(`aria-label="${candidate.ariaLabel}"`);
+  if (candidate.placeholder) descriptors.push(`placeholder="${candidate.placeholder}"`);
+  if (candidate.title) descriptors.push(`title="${candidate.title}"`);
+  if (candidate.type) descriptors.push(`type="${candidate.type}"`);
+  const attrText = descriptors.length > 0 ? ` ${descriptors.join(' ')}` : '';
+  const text = (candidate.text || '').replace(/\s+/g, ' ');
+  return `- ${candidate.id} <${tag}>${attrText} "${text}"`;
+}
+
+/**
+ * Builds the per-segment search prompt. The prompt is intentionally small:
+ * it includes only the candidates belonging to one semantic segment, plus a
+ * short page context, and ends with the query so a small model attends to it.
+ *
+ * @param {object} params - Prompt parameters.
+ * @param {string} params.query - The user's free-form search query.
+ * @param {object} params.segment - The segment descriptor.
+ * @param {object} params.context - The page context (title, url, headings).
+ * @returns {string} The formatted prompt.
+ */
+function buildSegmentSearchPrompt({ query, segment, context }) {
+  const contextText = JSON.stringify(
+    {
+      title: context.title,
+      url: context.url,
+      headings: context.headings,
+    },
+    null,
+    2
+  );
+
+  const candidateLines = segment.candidates.map(formatSearchCandidateLine);
+
+  return [
+    'Page:',
+    contextText,
+    '',
+    `Segment under examination: ${segment.segmentLabel}`,
+    '',
+    'Candidate elements in this segment:',
+    candidateLines.join('\n'),
+    '',
+    'Task: decide whether any candidate above satisfies the following user',
+    `request, reading it semantically rather than literally:`,
+    '',
+    `  "${query}"`,
+    '',
+    'Guidance:',
+    '- "how can i log in" matches "Sign in", "Log in", "Login", "Account".',
+    '- "where is the documentation" matches "Docs", "Documentation", "Guide", "Wiki".',
+    '- "how do i contact support" matches "Contact", "Support", "Help", "Get in touch".',
+    '- Prefer interactive elements (a, button, input, select, textarea, summary).',
+    '- A heading or section whose text describes the target may also be chosen.',
+    '- Ignore cookie banners, newsletter prompts, ads and unrelated site-wide links.',
+    '- You only need to choose the background color; the extension will pick a',
+    '  readable text color automatically to guarantee contrast.',
+    '',
+    'Return only valid JSON with this shape:',
+    '{',
+    '  "matched": boolean,',
+    '  "summary": string,',
+    '  "actions": [',
+    '    {',
+    '      "action": "set_style",',
+    '      "nodeId": "page-adapter-node-N",',
+    '      "style": {',
+    '        "backgroundColor": "#fde047",',
+    '        "outline": "3px solid #f59e0b",',
+    '        "outlineOffset": "2px"',
+    '      }',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- If nothing in this segment matches, set "matched": false and return an empty "actions" array.',
+    '- If one or more candidates match, set "matched": true and return at most 2 set_style actions.',
+    '- "nodeId" must be copied verbatim from the candidate list above.',
+    '- "style" must include "backgroundColor" and may include "outline" and "outlineOffset".',
+    '- Never include "color"; the extension will choose it automatically.',
+    '- Never use "hide_node", "remove_node", "set_text", or any destructive action.',
+    '- Set "summary" to a short sentence naming what you found, or an empty string when nothing matched.',
+    '- Do not include markdown, commentary, or text outside the JSON object.',
+  ].join('\n');
+}
+
+/**
+ * Asks Ollama whether a single segment contains the element(s) matching the
+ * user query, and returns the highlight plan for that segment.
+ *
+ * @param {object} params - The search parameters.
+ * @param {string} params.query - The user's free-form search query.
+ * @param {object} params.segment - The segment descriptor.
+ * @param {object} params.context - The page context.
+ * @param {AbortSignal|null} [params.signal=null] - Optional abort signal.
+ * @returns {Promise<object>} `{ ok, matched, actions, summary }`.
+ * @throws Will throw on abort or on exhausted retries.
+ */
+export async function handleSegmentSearch({ query, segment, context, signal = null }) {
+  if (!segment.candidates || segment.candidates.length === 0) {
+    return { ok: true, matched: false, actions: [], summary: '' };
+  }
+
+  const basePrompt = buildSegmentSearchPrompt({ query, segment, context });
+
+  const systemPrompt = [
+    'You are a semantic search assistant for a browser extension.',
+    'You are shown one segment of a web page at a time.',
+    'Decide whether any candidate in that segment satisfies the user query.',
+    'Return only JSON that matches the requested shape.',
+    'You may only apply highlight styles; never hide, remove, or rewrite content.',
+    'Use existing node ids from the candidate list only.',
+    'Do not produce internal reasoning. Output JSON directly.',
+  ].join(' ');
+
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= MAX_SEARCH_RETRIES; attempt++) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
+    try {
+      let prompt = basePrompt;
+      if (attempt > 0 && lastError) {
+        prompt += `\n\nYour previous response was invalid: ${lastError}\nPlease correct the response and return only valid JSON.`;
+      }
+
+      const responseText = await callOllama(
+        prompt,
+        systemPrompt,
+        await getPreferredModel(),
+        OLLAMA_NUM_PREDICT,
+        null,
+        signal
+      );
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response from Ollama');
+      }
+
+      const plan = parseJsonResponse(responseText);
+
+      // The model signals "no match here" either via "matched": false or by
+      // returning an empty action list. Both are treated the same way.
+      const rawActions = Array.isArray(plan.actions) ? plan.actions : [];
+      if (plan.matched === false || rawActions.length === 0) {
+        return {
+          ok: true,
+          matched: false,
+          actions: [],
+          summary: typeof plan.summary === 'string' ? plan.summary : '',
+        };
+      }
+
+      // The snapshot passed to validation only needs to resolve node ids
+      // against the candidates the model was actually shown. Building a
+      // minimal snapshot from the candidate list is enough and keeps this
+      // function independent from the page-wide snapshot.
+      const candidateSnapshot = {
+        root: { children: segment.candidates.map((c) => ({ id: c.id })) },
+      };
+
+      const validated = validateAndNormalizePlan(plan, candidateSnapshot);
+
+      return {
+        ok: true,
+        matched: validated.actions.length > 0,
+        actions: validated.actions,
+        summary: validated.summary,
+      };
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error;
+      }
+      lastError = error.message;
+      console.warn(
+        `[ollama] Segment search attempt ${attempt + 1} failed: ${lastError}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  console.error('[ollama] Segment search retries exhausted. Last error:', lastError);
+  throw new Error(
+    `Failed to search segment after ${MAX_SEARCH_RETRIES + 1} attempts. Last error: ${lastError}`
+  );
 }
 
 // =============================================================================

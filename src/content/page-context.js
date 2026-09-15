@@ -24,7 +24,7 @@ let nextNodeId = 1;
  * @param {string} colorStr - CSS color string.
  * @returns {{ r: number, g: number, b: number, a: number } | null}
  */
-function parseCSSColor(colorStr) {
+export function parseCSSColor(colorStr) {
   if (!colorStr || typeof colorStr !== 'string') return null;
   const trimmed = colorStr.trim();
   if (trimmed === 'transparent') {
@@ -59,7 +59,7 @@ function rgbToCSS(color) {
  * @param {number} b - Blue component (0-255).
  * @returns {number} Luminance (0..1).
  */
-function luminance(r, g, b) {
+export function luminance(r, g, b) {
   const [R, G, B] = [r, g, b].map((c) => {
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
@@ -74,12 +74,27 @@ function luminance(r, g, b) {
  * @param {{ r: number, g: number, b: number }} color2
  * @returns {number} Contrast ratio (>= 1).
  */
-function contrastRatio(color1, color2) {
+export function contrastRatio(color1, color2) {
   const l1 = luminance(color1.r, color1.g, color1.b);
   const l2 = luminance(color2.r, color2.g, color2.b);
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Picks a readable text color for a given background. The returned value is
+ * either near-black (for light backgrounds) or pure white (for dark
+ * backgrounds), following the same rule the high-contrast flow uses.
+ *
+ * @param {string} bgColor - A CSS color string for the background.
+ * @returns {string} A CSS color string suitable for readable text.
+ */
+export function pickReadableTextColor(bgColor) {
+  const bg = parseCSSColor(bgColor);
+  if (!bg) return '#000000';
+  const l = luminance(bg.r, bg.g, bg.b);
+  return l > 0.5 ? '#111827' : '#ffffff';
 }
 
 /**

@@ -853,6 +853,24 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
   updateSelectOptions(languageSelect, themeSelect, fontSizeSelect);
 
   const onPresetClick = (preset) => {
+    // Presets flagged with `requiresInput` need a free-form query from the
+    // user. The main textarea is reused as the source of that query.
+    if (preset.requiresInput) {
+      const query = textarea.value.trim();
+      if (!query) {
+        showTransientStatus(container, t('search.no_query'), 'error');
+        textarea.focus();
+        return;
+      }
+      const message = createUserRequest({
+        mode: 'preset',
+        request: query,
+        presetId: preset.id,
+      });
+      sendRequest(message, container, { presetId: preset.id });
+      return;
+    }
+
     const message = createUserRequest({
       mode: 'preset',
       request: preset.request,
@@ -925,13 +943,22 @@ async function initMenuUI(container, windowElement, floatingButton, settingsButt
 
   const handleDocumentClick = (event) => {
     const path = event.composedPath ? event.composedPath() : [event.target];
+
+    // `composedPath()` can include Document and Window objects, which are not
+    // Nodes and cannot be passed to `Node.prototype.contains`. Only test
+    // Node instances against the various roots.
+    const containsNode = (root, target) =>
+      target instanceof Node && root.contains(target);
+
     const isInsideSettingsPanel = path.some(
-      (el) => el === settingsPanel || settingsPanel.contains?.(el)
+      (el) => el === settingsPanel || containsNode(settingsPanel, el)
     );
     const isInsideToggle = path.some(
-      (el) => el === settingsButton || settingsButton.contains?.(el)
+      (el) => el === settingsButton || containsNode(settingsButton, el)
     );
-    const isInsideContainer = path.some((el) => el === container || container.contains?.(el));
+    const isInsideContainer = path.some(
+      (el) => el === container || containsNode(container, el)
+    );
 
     if (isInsideSettingsPanel || isInsideToggle) return;
     if (!isInsideContainer) {

@@ -121,6 +121,17 @@ async function onRuntimeMessage(message, sender, sendResponse) {
         return true;
       }
 
+      case 'GET_SEARCH_SEGMENTS': {
+        const { extractDomSnapshot } = await import('./page-context.js');
+        const { extractSearchSegments } = await import('./search-context.js');
+        const snapshot = extractDomSnapshot();
+        sendResponse({
+          ok: true,
+          segments: extractSearchSegments(snapshot),
+        });
+        return true;
+      }
+
       case 'GET_SIMPLIFY_CANDIDATES': {
         const { extractDomSnapshot } = await import('./page-context.js');
         const { extractSimplifyCandidates } = await import('./simplify-context.js');
