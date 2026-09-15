@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo.png" alt="Prisma logo" width="140" />
+
 # Prisma
 
 **A private, local AI agent that adapts the web to you.**
