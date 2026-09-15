@@ -4,7 +4,6 @@
 
 **A private, local AI agent that adapts the web to you.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-success.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Powered by Ollama](https://img.shields.io/badge/Powered%20by-Ollama-black.svg)](https://ollama.com)
 [![100% Local](https://img.shields.io/badge/100%25-Local-blueviolet.svg)](#privacy)
@@ -30,7 +29,6 @@
 - [Project Structure](#project-structure)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
-- [License](#license)
 
 ---
 
@@ -247,11 +245,6 @@ All user-visible strings must be externalized into `src/locales/`. All UI must r
 
 ---
 
-## License
-
-This project is released under the **MIT License**. See [`LICENSE`](LICENSE) for the full text.
-
----
 
 <div align="center">
 
