@@ -45,6 +45,20 @@
   --pa-spacing-2xl: 24px;
   --font-size-base: 1rem;
 
+  /* Themed surfaces. The window gradient is very subtle: it goes from the
+     base surface colour to a faintly tinted variant, which reads as depth
+     without ever competing with the content. The glow colour is a low-alpha
+     primary tint used behind the top of the menu. */
+  --pa-surface-gradient: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 65%, var(--pa-bg-surface)) 100%
+  );
+  --pa-decoration-glow-color: color-mix(in oklab, var(--pa-primary) 7%, transparent);
+  --pa-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --pa-card-shadow-hover: 0 8px 20px color-mix(in oklab, var(--pa-primary) 16%, transparent),
+                          0 1px 2px rgba(15, 23, 42, 0.04);
+
   display: block;
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
@@ -78,10 +92,22 @@
   --pa-danger: #f87171;
   --pa-danger-hover: #ef4444;
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
+
+  --pa-surface-gradient: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 45%, var(--pa-bg-surface)) 100%
+  );
+  --pa-decoration-glow-color: color-mix(in oklab, var(--pa-primary) 14%, transparent);
+  --pa-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --pa-card-shadow-hover: 0 8px 20px color-mix(in oklab, var(--pa-primary) 28%, transparent),
+                          0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 /* ============================================================================
    High contrast mode (via host class)
+   Gradients and shadows are flattened to solid colours and outlines so the
+   theme stays strictly black-and-white with the yellow accent.
    ============================================================================ */
 :host-context(.page-adapter-high-contrast) {
   --pa-bg-surface: #000000;
@@ -100,6 +126,11 @@
   --pa-danger: #ff8080;
   --pa-danger-hover: #ffb0b0;
   --pa-shadow-panel: none;
+
+  --pa-surface-gradient: linear-gradient(180deg, #000000 0%, #000000 100%);
+  --pa-decoration-glow-color: transparent;
+  --pa-card-shadow: none;
+  --pa-card-shadow-hover: none;
 }
 
 /* ============================================================================
@@ -432,6 +463,8 @@
 
 /* ============================================================================
    Floating window (draggable panel)
+   The window uses a subtle vertical gradient so the surface reads as a
+   single, softly lit panel rather than a flat rectangle.
    ============================================================================ */
 .page-adapter-floating-window {
   position: fixed;
@@ -440,7 +473,7 @@
   flex-direction: column;
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
-  background: var(--pa-bg-surface);
+  background: var(--pa-surface-gradient);
   border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-lg);
   box-shadow: var(--pa-shadow-panel);
@@ -453,7 +486,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 0;
-  background: var(--pa-bg-surface);
+  background: transparent;
 }
 
 /* ============================================================================
@@ -716,6 +749,8 @@
 
 /* ============================================================================
    Menu window – title bar
+   The bottom edge gets a soft hairline highlight so the bar reads as a
+   distinct surface from the body without adding weight.
    ============================================================================ */
 .page-adapter-title-bar {
   display: flex;
@@ -810,12 +845,22 @@
 
 /* ============================================================================
    Menu window – content layout
+   A soft radial glow sits behind the top of the content, echoing the
+   window's vertical gradient and giving the header area a faint sense of
+   light. The glow is a background-image so it never affects layout and
+   never interferes with the stacking of the sections below.
    ============================================================================ */
 .page-adapter-menu-container {
   display: flex;
   flex-direction: column;
   gap: var(--pa-spacing-xl);
   padding: var(--pa-spacing-2xl);
+  background-image: radial-gradient(
+    ellipse 560px 260px at 50% -20%,
+    var(--pa-decoration-glow-color) 0%,
+    transparent 70%
+  );
+  background-repeat: no-repeat;
 }
 
 .page-adapter-menu-header {
@@ -852,6 +897,8 @@
 
 /* ============================================================================
    Menu window – section headers
+   The accent bar uses a short vertical gradient so it reads as a small
+   illuminated tick rather than a flat rectangle.
    ============================================================================ */
 .page-adapter-menu-section h2 {
   display: flex;
@@ -868,13 +915,21 @@
 .page-adapter-menu-section h2::before {
   content: '';
   width: 3px;
-  height: 13px;
+  height: 14px;
   border-radius: 2px;
-  background: var(--pa-primary);
+  background: linear-gradient(
+    180deg,
+    var(--pa-primary) 0%,
+    color-mix(in oklab, var(--pa-primary) 45%, transparent) 100%
+  );
 }
 
 /* ============================================================================
    Menu window – presets grid
+   Each preset is a soft card: a slight vertical gradient, a hairline
+   border that turns into a primary-tinted border on hover, and a lift with
+   a primary-tinted shadow that reinforces the interactive state. The
+   gradient and shadow are themed and flatten out in high contrast mode.
    ============================================================================ */
 .page-adapter-presets-grid {
   display: grid;
@@ -882,13 +937,11 @@
   gap: var(--pa-spacing-sm);
 }
 
-/* Each preset is wrapped so a small cancel button can float in the
-   top-right corner without nesting interactive elements. */
 .page-adapter-preset-wrapper {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 52px;
+  min-height: 56px;
 }
 
 .page-adapter-preset-wrapper .page-adapter-preset-button {
@@ -903,17 +956,22 @@
   align-items: center;
   gap: var(--pa-spacing-md);
   width: 100%;
-  min-height: 52px;
-  padding: 10px 12px;
+  min-height: 56px;
+  padding: 12px 14px;
   border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-md);
-  background: var(--pa-bg-surface);
+  background: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 45%, var(--pa-bg-surface)) 100%
+  );
   color: var(--pa-text-primary);
   font-family: var(--pa-font-family);
   font-size: calc(15px * var(--pa-font-scale));
   font-weight: 500;
   text-align: left;
   cursor: pointer;
+  box-shadow: var(--pa-card-shadow);
   transition:
     background 150ms ease,
     border-color 150ms ease,
@@ -922,10 +980,9 @@
 }
 
 .page-adapter-preset-button:hover {
-  background: var(--pa-bg-subtle);
-  border-color: var(--pa-border-input);
+  border-color: color-mix(in oklab, var(--pa-primary) 38%, var(--pa-border-color));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--pa-card-shadow-hover);
 }
 
 .page-adapter-preset-button:focus-visible {
@@ -937,6 +994,20 @@
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
   transform: none;
+  box-shadow: var(--pa-card-shadow);
+}
+
+/* High contrast mode: no gradient, no shadow, but a solid 2px border so
+   the button still reads as a distinct surface. */
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-button {
+  background: var(--pa-bg-surface);
+  border-width: 2px;
+  box-shadow: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-button:hover {
+  border-color: var(--pa-primary);
+  transform: none;
   box-shadow: none;
 }
 
@@ -944,21 +1015,29 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--pa-radius-sm);
-  background: color-mix(in oklab, var(--pa-primary) 14%, transparent);
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--pa-primary) 20%, transparent) 0%,
+    color-mix(in oklab, var(--pa-primary) 8%, transparent) 100%
+  );
   color: var(--pa-primary);
-  font-size: calc(15px * var(--pa-font-scale));
-  font-weight: 700;
 }
 
 .page-adapter-preset-icon svg {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
   stroke: currentColor;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-icon {
+  background: transparent;
+  border: 2px solid var(--pa-primary);
+  color: var(--pa-primary);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1065,10 +1144,13 @@
 
 /* ============================================================================
    Menu window – input section
+   The divider between the presets and the input area is a single, full-width
+   hairline. The vertical rhythm and the section heading treatment provide
+   enough visual separation on their own.
    ============================================================================ */
 .page-adapter-input-section {
+  margin-top: var(--pa-spacing-lg);
   padding-top: var(--pa-spacing-lg);
-  border-top: 1px solid var(--pa-border-color);
 }
 
 .page-adapter-input-label {
@@ -1106,6 +1188,7 @@
   line-height: 1.55;
   resize: vertical;
   outline: none;
+  box-shadow: var(--pa-card-shadow);
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -1115,7 +1198,7 @@
 
 .page-adapter-menu-textarea:focus {
   border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
+  box-shadow: var(--pa-shadow-focus), var(--pa-card-shadow);
 }
 
 .page-adapter-menu-textarea:disabled {
