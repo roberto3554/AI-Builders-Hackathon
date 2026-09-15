@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.png" alt="Prisma logo" width="140" />
+<img src="logo2.png" alt="Prisma logo" width="140" />
 
 # Prisma
 
