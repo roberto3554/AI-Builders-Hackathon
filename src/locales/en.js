@@ -57,7 +57,9 @@ export default {
   // ===========================================================================
   // Content – Quick menu
   // ===========================================================================
+  'quick_menu.open_button': 'Open Page Adapter',
   'quick_menu.open_menu': 'Open menu',
+  'quick_menu.stop_action': 'Stop current action',
 
   // ===========================================================================
   // Content – Summaries

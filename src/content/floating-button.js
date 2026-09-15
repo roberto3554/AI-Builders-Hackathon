@@ -5,8 +5,9 @@
  * input panel; presets that produce a preview (summarize) keep the menu
  * open and display a result panel once the request completes. While any
  * quick action is running, a rotating ring is shown around the floating
- * button until the request settles. Clicking the button while a quick
- * action is running cancels that action instead of toggling the menu.
+ * button and its icon is replaced by a stop square, making the cancel
+ * behaviour unambiguous. Clicking the button while a quick action is
+ * running cancels that action instead of toggling the menu.
  * Dependencies: chrome.runtime, chrome.storage, shared/constants.js,
  *               shared/locale.js, shared/messages.js, menu-window.js,
  *               quick-action-input.js.
@@ -45,6 +46,17 @@ const QUICK_MENU_CLOSE_ANIMATION_MS = 220;
 const QUICK_MENU_CLOSE_BUFFER_MS = 20;
 
 const PRESET_ID_SUMMARIZE = 'summarize';
+
+/**
+ * Stop icon shown while a quick action is running, replacing the default
+ * accessibility glyph so it is clear that clicking the button will cancel
+ * the current operation.
+ */
+const STOP_ICON_SVG = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/>
+  </svg>
+`;
 
 // =============================================================================
 // Module state
@@ -207,9 +219,10 @@ function computeQuickMenuPosition(button, itemCount) {
 // =============================================================================
 
 /**
- * Shows the loading ring around the floating button. Multiple concurrent
- * requests are supported: the ring remains visible until the last one
- * settles.
+ * Shows the loading ring around the floating button and switches the icon
+ * to the stop square so the cancel behaviour is unambiguous. Multiple
+ * concurrent requests are supported: the ring remains visible until the
+ * last one settles.
  *
  * @param {HTMLElement} button - The floating button element.
  * @returns {void}
@@ -218,11 +231,13 @@ function startButtonLoading(button) {
   activeRequestCount += 1;
   button.dataset.loading = 'true';
   button.setAttribute('aria-busy', 'true');
+  button.setAttribute('aria-label', t('quick_menu.stop_action'));
+  button.setAttribute('title', t('quick_menu.stop_action'));
 }
 
 /**
- * Removes one loading count. The ring is hidden only when no request is
- * outstanding.
+ * Removes one loading count. The ring and the original icon are restored
+ * only when no request is outstanding.
  *
  * @param {HTMLElement} button - The floating button element.
  * @returns {void}
@@ -232,6 +247,8 @@ function stopButtonLoading(button) {
   if (activeRequestCount === 0) {
     button.dataset.loading = 'false';
     button.removeAttribute('aria-busy');
+    button.setAttribute('aria-label', t('quick_menu.open_button'));
+    button.setAttribute('title', t('quick_menu.open_button'));
   }
 }
 
@@ -691,7 +708,8 @@ async function toggleQuickMenu(button, shadowRoot) {
  * Creates and injects the floating button into the shadow root.
  * The button can be dragged to a new position, and its position is
  * persisted. Clicking the button toggles a vertical quick-action menu.
- * While a quick action is running, clicking the button cancels it.
+ * While a quick action is running, the icon switches to a stop square and
+ * clicking the button cancels the current operation.
  *
  * @param {ShadowRoot} shadowRoot - The shadow root that hosts the UI.
  * @returns {void}
@@ -704,22 +722,30 @@ export function createFloatingButton(shadowRoot) {
   const button = document.createElement('button');
   button.id = 'extension-floating-button';
   button.className = 'page-adapter-floating-button';
-  button.setAttribute('aria-label', 'Open Page Adapter');
-  button.setAttribute('title', 'Open Page Adapter');
+  button.setAttribute('aria-label', t('quick_menu.open_button'));
+  button.setAttribute('title', t('quick_menu.open_button'));
   button.setAttribute('aria-expanded', 'false');
   button.type = 'button';
   button.dataset.extension = 'true';
   button.dataset.loading = 'false';
 
-  // The icon and the loading ring are permanent children of the button.
-  // Keeping them separate means the ring is never wiped when the icon
-  // finishes loading, and its visibility does not depend on pseudo-element
-  // stacking.
+  // Two icons share the same slot and crossfade via the `data-loading`
+  // attribute on the button: the default accessibility glyph while idle
+  // and a stop square while a quick action is running.
   const iconSpan = document.createElement('span');
   iconSpan.className = 'page-adapter-floating-button__icon';
   iconSpan.setAttribute('aria-hidden', 'true');
   button.appendChild(iconSpan);
 
+  const stopSpan = document.createElement('span');
+  stopSpan.className =
+    'page-adapter-floating-button__icon page-adapter-floating-button__icon--stop';
+  stopSpan.setAttribute('aria-hidden', 'true');
+  stopSpan.innerHTML = STOP_ICON_SVG;
+  button.appendChild(stopSpan);
+
+  // The ring paints above both icons; it is appended last so it wins the
+  // paint order without needing an explicit z-index.
   const ringSpan = document.createElement('span');
   ringSpan.className = 'page-adapter-floating-button__ring';
   ringSpan.setAttribute('aria-hidden', 'true');
