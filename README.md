@@ -59,7 +59,7 @@ No cloud. No accounts. No API keys. Just you and your browser.
 ## Demo
 
 <p>
-  <img src="nyt.gif" width="400" style="margin-right: 30px;">
+  <img src="nyt.gif" width="400" style="margin-right: 100px;">
   <img src="contrast.gif" width="400">
 </p>
 
