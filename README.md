@@ -1,9 +1,8 @@
 <div align="center">
-
-<img src="logo2.png" alt="Prisma logo" width="440" />
-
-
-**A private, local AI agent that adapts the web to you.**
+  <img src="logo2.png" alt="Prisma logo" width="440" />
+  <br>
+  <strong>A private, local AI agent that adapts the web to you.</strong>
+</div>
 
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-success.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Powered by Ollama](https://img.shields.io/badge/Powered%20by-Ollama-black.svg)](https://ollama.com)
