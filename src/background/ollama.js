@@ -1,7 +1,7 @@
 /**
  * @fileoverview Ollama API communication and AI helpers.
  * Dependencies: shared/locale.js, shared/preferences.js.
- * Used by: message-handler.js.
+ * Used by: message-handler.js, search.js.
  */
 
 import { t } from '../shared/locale.js';
@@ -13,14 +13,13 @@ import { DEFAULT_PREFERENCES, loadPreferences } from '../shared/preferences.js';
 
 const OLLAMA_DEFAULT_MODEL = DEFAULT_PREFERENCES.ollamaModel;
 const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
-// Reduced temperature for more deterministic and predictable output.
-const OLLAMA_TEMPERATURE = 0.3;
+const OLLAMA_TEMPERATURE = 0.1;
 const OLLAMA_TOP_P = 0.9;
-// Maximum number of iterations for DOM adaptation.
-export const MAX_DOM_ADAPTATION_STEPS = 3;
-// Minimum number of actions required for high-contrast mode.
+const OLLAMA_NUM_CTX = 8192;
+const OLLAMA_NUM_PREDICT = 4096;
+export const MAX_DOM_ADAPTATION_STEPS = 20;
 export const MIN_HIGH_CONTRAST_ACTIONS = 2;
-// Base set of allowed DOM actions.
+
 const ALLOWED_DOM_ACTIONS = new Set([
   'read_node',
   'set_text',
@@ -32,41 +31,83 @@ const ALLOWED_DOM_ACTIONS = new Set([
   'show_node',
   'remove_node',
 ]);
-// Allowed actions for high-contrast mode (no destructive actions).
-const ALLOWED_DOM_ACTIONS_HIGH_CONTRAST = new Set([
-  'set_style',
-  'set_attribute',
-  'add_class',
-  'remove_class',
-  'set_text',
-]);
 
-// Enable debug logging
-const DEBUG = true;
+const DEBUG = false;
+const MAX_LLM_RESPONSE_RETRIES = 4;
+const MAX_SEARCH_RETRIES = 2;
+
+// =============================================================================
+// Response Validation Constants
+// =============================================================================
+
+const ACTION_SCHEMA = {
+  action: { type: 'string', required: true, allowed: ALLOWED_DOM_ACTIONS },
+  nodeId: { type: 'string', required: true, pattern: /^page-adapter-node-\d+$/ },
+  text: { type: 'string', required: false },
+  style: {
+    type: 'object',
+    required: false,
+    allowedKeys: [
+      'backgroundColor',
+      'color',
+      'borderColor',
+      'borderWidth',
+      'borderStyle',
+      'boxShadow',
+      'fontSize',
+      'fontWeight',
+      'lineHeight',
+      'letterSpacing',
+      'padding',
+      'margin',
+      'display',
+      'visibility',
+      'outline',
+      'outlineOffset',
+      'textDecoration',
+      'textShadow',
+    ],
+  },
+  attributes: { type: 'object', required: false },
+  depth: { type: 'number', required: false, min: 1, max: 5 },
+};
 
 // =============================================================================
 // Ollama API communication
 // =============================================================================
 
 /**
- * Handles a raw Ollama request.
+ * Handles a raw Ollama request. Accepts an optional AbortSignal so the
+ * underlying fetch can be cancelled when the user aborts a request.
  *
  * @param {object} params - The request parameters.
  * @param {string} params.prompt - The prompt to send.
  * @param {string|null} [params.systemPrompt=null] - Optional system prompt.
  * @param {string} [params.model=OLLAMA_DEFAULT_MODEL] - The model to use.
+ * @param {number} [params.numPredict=OLLAMA_NUM_PREDICT] - Max output tokens.
+ * @param {boolean|null} [params.think=null] - Optional thinking toggle.
+ * @param {AbortSignal|null} [params.signal=null] - Optional abort signal.
  * @returns {Promise<object>} The Ollama response.
- * @throws Will throw if the fetch fails or returns a non-ok status.
+ * @throws Will throw if the fetch fails, is aborted, or returns a non-ok status.
  */
 export async function handleOllamaRequest({
   prompt,
   systemPrompt = null,
   model = OLLAMA_DEFAULT_MODEL,
+  numPredict = OLLAMA_NUM_PREDICT,
+  think = null,
+  signal = null,
 }) {
   if (DEBUG) {
     console.log('[ollama] Sending request to Ollama with model:', model);
     console.log('[ollama] System prompt:', systemPrompt);
-    console.log('[ollama] Prompt (first 500 chars):', prompt.slice(0, 500) + (prompt.length > 500 ? '...' : ''));
+    console.log('[ollama] Prompt length:', prompt.length, 'characters');
+  }
+
+  if (signal?.aborted) {
+    const abortError = new Error('Request aborted before dispatch.');
+    abortError.name = 'AbortError';
+    throw abortError;
   }
 
   const body = {
@@ -75,16 +116,34 @@ export async function handleOllamaRequest({
     system: systemPrompt || undefined,
     stream: false,
     options: {
+      num_ctx: OLLAMA_NUM_CTX,
+      num_predict: numPredict,
       temperature: OLLAMA_TEMPERATURE,
       top_p: OLLAMA_TOP_P,
     },
   };
 
-  const response = await fetch(OLLAMA_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  if (think !== null) {
+    body.think = think;
+  }
+
+  let response;
+  try {
+    response = await fetch(OLLAMA_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: signal || undefined,
+    });
+  } catch (fetchError) {
+    if (fetchError.name === 'AbortError') {
+      throw fetchError;
+    }
+    console.error('[ollama] Network error connecting to Ollama:', fetchError);
+    throw new Error(
+      `Could not connect to Ollama at ${OLLAMA_API_URL}. Please ensure it is running.`
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -94,7 +153,18 @@ export async function handleOllamaRequest({
 
   const data = await response.json();
   if (DEBUG) {
-    console.log('[ollama] Raw response:', data.response);
+    console.log('[ollama] done_reason:', data.done_reason);
+    console.log('[ollama] response length:', (data.response || '').length);
+  }
+
+  if (!data.response || data.response.trim() === '') {
+    const reason = data.done_reason || 'unknown';
+    throw new Error(
+      `Empty response from Ollama (done_reason: ${reason}). ` +
+        `If done_reason is "length", the model may have emitted hidden reasoning tokens ` +
+        `and consumed the entire output budget. Try a smaller batch, a higher num_predict, ` +
+        `or a model without a thinking mode.`
+    );
   }
   return { ok: true, response: data.response };
 }
@@ -105,20 +175,31 @@ export async function handleOllamaRequest({
  * @param {string} prompt - The prompt to send.
  * @param {string|null} systemPrompt - Optional system prompt.
  * @param {string} [model] - Optional model name.
+ * @param {number} [numPredict] - Optional max output token count.
+ * @param {boolean} [think=null] - Whether to enable thinking mode.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<string>} The generated text.
- * @throws Will throw if the Ollama request fails.
+ * @throws Will throw if the Ollama request fails or is aborted.
  */
 export async function callOllama(
   prompt,
   systemPrompt = null,
-  model = OLLAMA_DEFAULT_MODEL
+  model = OLLAMA_DEFAULT_MODEL,
+  numPredict = OLLAMA_NUM_PREDICT,
+  think = null,
+  signal = null
 ) {
-  const result = await handleOllamaRequest({ prompt, systemPrompt, model });
-
+  const result = await handleOllamaRequest({
+    prompt,
+    systemPrompt,
+    model,
+    numPredict,
+    think,
+    signal,
+  });
   if (!result.ok) {
     throw new Error(result.error || 'Unknown error from Ollama');
   }
-
   return result.response;
 }
 
@@ -127,9 +208,10 @@ async function getPreferredModel() {
   return preferences.ollamaModel || OLLAMA_DEFAULT_MODEL;
 }
 
+export { getPreferredModel };
+
 /**
  * Extracts a JSON object from a model response.
- * Uses multiple fallback strategies to handle common formatting issues.
  *
  * @param {string} responseText - The raw model response.
  * @returns {object} Parsed JSON payload.
@@ -137,18 +219,11 @@ async function getPreferredModel() {
  */
 function parseJsonResponse(responseText) {
   const trimmedText = responseText.trim();
-  if (DEBUG) {
-    console.log('[ollama] Trying to parse JSON from response:', trimmedText.slice(0, 300) + (trimmedText.length > 300 ? '...' : ''));
-  }
-
-  // Direct parse.
   try {
     return JSON.parse(trimmedText);
   } catch {
-    // Not valid JSON yet.
+    // Continue with fallbacks.
   }
-
-  // Try to extract from a code fence (```json ... ```).
   const fencedMatch = trimmedText.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fencedMatch?.[1]) {
     try {
@@ -157,8 +232,6 @@ function parseJsonResponse(responseText) {
       // Continue.
     }
   }
-
-  // Look for the first and last curly brace.
   const firstBrace = trimmedText.indexOf('{');
   const lastBrace = trimmedText.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -168,8 +241,6 @@ function parseJsonResponse(responseText) {
       // Continue.
     }
   }
-
-  // As a last resort, try to parse as an array and wrap it into an object.
   const firstBracket = trimmedText.indexOf('[');
   const lastBracket = trimmedText.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
@@ -183,41 +254,363 @@ function parseJsonResponse(responseText) {
       // Continue.
     }
   }
+  throw new Error('The model did not return valid JSON.');
+}
 
-  // Additional attempt: find any JSON-like object by scanning for balanced braces.
-  // This handles cases where the model includes extra text after a valid JSON.
-  let braceCount = 0;
-  let start = -1;
-  for (let i = 0; i < trimmedText.length; i++) {
-    if (trimmedText[i] === '{') {
-      if (braceCount === 0) start = i;
-      braceCount++;
-    } else if (trimmedText[i] === '}') {
-      braceCount--;
-      if (braceCount === 0 && start !== -1) {
-        const candidate = trimmedText.slice(start, i + 1);
-        try {
-          return JSON.parse(candidate);
-        } catch {
-          // Continue scanning.
-        }
+// =============================================================================
+// Response Validation Helpers
+// =============================================================================
+
+/**
+ * Validates a single action.
+ *
+ * @param {object} action - The action to validate.
+ * @param {number} index - Index in the actions array.
+ * @returns {object} Normalized action.
+ * @throws Will throw if validation fails.
+ */
+function validateActionSchema(action, index) {
+  if (!action || typeof action !== 'object') {
+    throw new Error(`Action at index ${index} is not an object.`);
+  }
+  for (const [field, spec] of Object.entries(ACTION_SCHEMA)) {
+    if (spec.required && !(field in action)) {
+      throw new Error(`Action at index ${index} missing required field: ${field}`);
+    }
+  }
+  for (const [field, value] of Object.entries(action)) {
+    const spec = ACTION_SCHEMA[field];
+    if (!spec) {
+      throw new Error(`Action at index ${index} has unexpected field: ${field}`);
+    }
+    const expectedType = spec.type;
+    const actualType = typeof value;
+    if (actualType !== expectedType) {
+      throw new Error(
+        `Action at index ${index} field "${field}" expected type ${expectedType}, got ${actualType}`
+      );
+    }
+    if (spec.allowed && spec.allowed instanceof Set) {
+      if (!spec.allowed.has(value)) {
+        throw new Error(
+          `Action at index ${index} field "${field}" value "${value}" not allowed.`
+        );
+      }
+    }
+    if (spec.pattern && !spec.pattern.test(value)) {
+      throw new Error(
+        `Action at index ${index} field "${field}" value "${value}" does not match pattern.`
+      );
+    }
+    if (spec.min !== undefined && value < spec.min) {
+      throw new Error(
+        `Action at index ${index} field "${field}" value ${value} below minimum ${spec.min}`
+      );
+    }
+    if (spec.max !== undefined && value > spec.max) {
+      throw new Error(
+        `Action at index ${index} field "${field}" value ${value} above maximum ${spec.max}`
+      );
+    }
+    if (field === 'style') {
+      const invalidKeys = Object.keys(value).filter((key) => !spec.allowedKeys.includes(key));
+      if (invalidKeys.length > 0) {
+        throw new Error(
+          `Action at index ${index} style contains disallowed keys: ${invalidKeys.join(', ')}`
+        );
       }
     }
   }
+  const normalized = { action: action.action, nodeId: action.nodeId };
+  if (action.text !== undefined) normalized.text = action.text;
+  if (action.style !== undefined) normalized.style = action.style;
+  if (action.attributes !== undefined) normalized.attributes = action.attributes;
+  if (action.depth !== undefined) normalized.depth = action.depth;
+  return normalized;
+}
 
-  throw new Error('The model did not return valid JSON.');
+/**
+ * Checks that the nodeId exists in the snapshot.
+ *
+ * @param {string} nodeId - The node ID to check.
+ * @param {object} snapshot - The DOM snapshot.
+ * @returns {boolean} True if the node exists.
+ */
+function nodeExistsInSnapshot(nodeId, snapshot) {
+  if (!snapshot || !snapshot.root) return false;
+  let found = false;
+  function traverse(node) {
+    if (found) return;
+    if (node.id === nodeId) {
+      found = true;
+      return;
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        traverse(child);
+        if (found) break;
+      }
+    }
+  }
+  traverse(snapshot.root);
+  return found;
+}
+
+/**
+ * Detects conflicting actions within the same plan.
+ *
+ * @param {Array<object>} actions - List of normalized actions.
+ * @returns {Array<string>} Array of conflict descriptions.
+ */
+function detectConflicts(actions) {
+  const conflicts = [];
+  const nodeChanges = new Map();
+  for (const action of actions) {
+    const nodeId = action.nodeId;
+    if (!nodeChanges.has(nodeId)) {
+      nodeChanges.set(nodeId, { style: {}, class: {}, attribute: {} });
+    }
+    const record = nodeChanges.get(nodeId);
+    if (action.action === 'set_style') {
+      for (const [prop, value] of Object.entries(action.style || {})) {
+        if (record.style[prop] !== undefined && record.style[prop] !== value) {
+          conflicts.push(`Node ${nodeId}: conflicting style property "${prop}"`);
+        }
+        record.style[prop] = value;
+      }
+    } else if (action.action === 'add_class') {
+      const cls = action.text?.trim();
+      if (cls && record.class[cls] === 'remove') {
+        conflicts.push(`Node ${nodeId}: adding class "${cls}" after removal`);
+      }
+      record.class[cls] = 'add';
+    } else if (action.action === 'remove_class') {
+      const cls = action.text?.trim();
+      if (cls && record.class[cls] === 'add') {
+        conflicts.push(`Node ${nodeId}: removing class "${cls}" after addition`);
+      }
+      record.class[cls] = 'remove';
+    } else if (action.action === 'set_attribute') {
+      for (const [attr, value] of Object.entries(action.attributes || {})) {
+        if (record.attribute[attr] !== undefined && record.attribute[attr] !== value) {
+          conflicts.push(`Node ${nodeId}: conflicting attribute "${attr}"`);
+        }
+        record.attribute[attr] = value;
+      }
+    }
+  }
+  return conflicts;
+}
+
+/**
+ * Builds a list of available node IDs with their tag and text for the prompt.
+ *
+ * @param {object} node - The serialized node.
+ * @param {Array} acc - Accumulator array.
+ */
+function collectNodeInfo(node, acc) {
+  if (!node) return;
+  const text = node.text || '';
+  acc.push(
+    `- ${node.id} (${node.tagName}): "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`
+  );
+  if (node.children) {
+    for (const child of node.children) {
+      collectNodeInfo(child, acc);
+    }
+  }
+}
+
+/**
+ * Collects node IDs that have accessibility classification 'FAIL'.
+ *
+ * @param {object} node - The serialized node.
+ * @param {Array<string>} acc - Accumulator array.
+ */
+function collectFailingNodeIds(node, acc) {
+  if (!node) return;
+  if (node.accessibility && node.accessibility.classification === 'FAIL') {
+    acc.push(node.id);
+  }
+  if (node.children) {
+    for (const child of node.children) {
+      collectFailingNodeIds(child, acc);
+    }
+  }
+}
+
+/**
+ * Extracts detailed information for a list of failing nodes.
+ *
+ * @param {Array<string>} nodeIds - List of node IDs.
+ * @param {object} snapshot - The DOM snapshot.
+ * @returns {string} A formatted string describing each failing node.
+ */
+function getFailingNodesDescription(nodeIds, snapshot) {
+  if (!nodeIds || nodeIds.length === 0) {
+    return 'None';
+  }
+  const descriptions = [];
+  function findNodeById(node, id) {
+    if (!node) return null;
+    if (node.id === id) return node;
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  for (const id of nodeIds) {
+    const node = findNodeById(snapshot.root, id);
+    if (node) {
+      const text = node.text || '';
+      const ratio =
+        node.accessibility?.contrastRatio !== null
+          ? node.accessibility.contrastRatio.toFixed(2)
+          : 'unknown';
+      const bg = node.accessibility?.effectiveBackground || 'unknown';
+      const fg = node.style?.color || 'unknown';
+      const tag = node.tagName || 'element';
+      descriptions.push(
+        `- ${id} (${tag}): text="${text.slice(0, 30)}${
+          text.length > 30 ? '...' : ''
+        }", ratio=${ratio}, bg=${bg}, fg=${fg}`
+      );
+    } else {
+      descriptions.push(`- ${id}: (not found in snapshot)`);
+    }
+  }
+  return descriptions.join('\n');
+}
+
+/**
+ * Validates and normalizes an entire plan.
+ *
+ * @param {object} plan - Parsed plan from model.
+ * @param {object} snapshot - The DOM snapshot.
+ * @returns {object} Normalized plan with validated actions.
+ * @throws Will throw if validation fails structurally, or if every action the
+ *   model returned failed per-action validation.
+ */
+function validateAndNormalizePlan(plan, snapshot) {
+  if (!plan || typeof plan !== 'object') {
+    throw new Error('Plan is not an object.');
+  }
+  if (!Array.isArray(plan.actions)) {
+    throw new Error('Plan.actions must be an array.');
+  }
+
+  const normalizedActions = [];
+  for (let i = 0; i < plan.actions.length; i++) {
+    const raw = plan.actions[i];
+    let action;
+    try {
+      action = validateActionSchema(raw, i);
+    } catch (error) {
+      console.warn(`[ollama] Skipping action at index ${i}: ${error.message}`);
+      continue;
+    }
+    if (!nodeExistsInSnapshot(action.nodeId, snapshot)) {
+      console.warn(
+        `[ollama] Skipping action at index ${i} because nodeId "${action.nodeId}" does not exist.`
+      );
+      continue;
+    }
+    normalizedActions.push(action);
+  }
+
+  // Fail loudly when the model produced actions but none of them passed
+  // validation, so the retry loop can reissue the prompt with the previous
+  // error appended instead of silently returning an empty plan.
+  if (normalizedActions.length === 0 && plan.actions.length > 0) {
+    throw new Error(
+      `All ${plan.actions.length} action(s) returned by the model failed validation.`
+    );
+  }
+
+  const conflicts = detectConflicts(normalizedActions);
+  if (conflicts.length > 0) {
+    console.warn('[ollama] Conflicts detected:', conflicts);
+  }
+
+  return {
+    actions: normalizedActions,
+    complete: Boolean(plan.complete),
+    summary: typeof plan.summary === 'string' ? plan.summary : '',
+  };
+}
+
+// =============================================================================
+// DOM adaptation prompts
+// =============================================================================
+
+/**
+ * Builds the high-contrast adaptation prompt.
+ *
+ * @param {object} params - Prompt parameters.
+ * @returns {string} The formatted prompt.
+ */
+function buildHighContrastPrompt({
+  request,
+  pageContext,
+  iteration,
+  hasPreviousActions,
+  previousActionsSummary,
+  failingNodeIds = [],
+}) {
+  const failingDetails =
+    failingNodeIds.length > 0
+      ? getFailingNodesDescription(failingNodeIds, pageContext.snapshot)
+      : 'None (all nodes have good contrast)';
+
+  const lines = [
+    `User request: ${request}`,
+    `Iteration: ${iteration}`,
+    '',
+    'Task: fix low-contrast text on the page by adjusting foreground and',
+    'background colors on the listed nodes.',
+    '',
+    'Failing nodes:',
+    failingDetails,
+    '',
+    'Return only valid JSON with this exact shape:',
+    '{',
+    '  "complete": boolean,',
+    '  "summary": string,',
+    '  "actions": [',
+    '    {',
+    '      "action": "set_style",',
+    '      "nodeId": "page-adapter-node-5",',
+    '      "style": { "color": "#ffffff", "backgroundColor": "#000000" }',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- Every action must include "action", "nodeId", and "style".',
+    '- "action" must be exactly "set_style".',
+    '- "nodeId" must be copied verbatim from the failing nodes list above.',
+    '- "style" must include both "color" and "backgroundColor".',
+    '- Choose colors that achieve at least a 4.5:1 contrast ratio.',
+    '- Set "complete": true only when every failing node has been addressed.',
+    '- Do not include markdown, commentary, or text outside the JSON object.',
+  ];
+
+  if (hasPreviousActions && previousActionsSummary) {
+    lines.push('');
+    lines.push('Previous changes already applied:');
+    lines.push(previousActionsSummary);
+  }
+
+  return lines.join('\n');
 }
 
 /**
  * Builds the DOM adaptation prompt.
  *
  * @param {object} params - Prompt parameters.
- * @param {string} params.request - The user request.
- * @param {object} params.pageContext - Page context and snapshot.
- * @param {number} params.iteration - Current iteration number.
- * @param {string|null} params.presetId - Preset identifier (if any).
- * @param {boolean} params.hasPreviousActions - Whether previous actions exist.
- * @param {string} params.previousActionsSummary - Summary of previous actions.
  * @returns {string} The formatted prompt.
  */
 function buildDomAdaptationPrompt({
@@ -227,7 +620,19 @@ function buildDomAdaptationPrompt({
   presetId,
   hasPreviousActions,
   previousActionsSummary,
+  failingNodeIds = [],
 }) {
+  if (presetId === 'high_contrast') {
+    return buildHighContrastPrompt({
+      request,
+      pageContext,
+      iteration,
+      hasPreviousActions,
+      previousActionsSummary,
+      failingNodeIds,
+    });
+  }
+
   const snapshotText = JSON.stringify(pageContext.snapshot).slice(0, 40000);
   const contextText = JSON.stringify(
     {
@@ -241,15 +646,16 @@ function buildDomAdaptationPrompt({
     2
   );
 
-  // Determine allowed actions based on preset.
-  let allowedActions = Array.from(ALLOWED_DOM_ACTIONS);
-  if (presetId === 'high_contrast') {
-    allowedActions = Array.from(ALLOWED_DOM_ACTIONS_HIGH_CONTRAST);
-  }
-  const actionsList = allowedActions.map((a) => `- ${a}`).join('\n');
+  const actionsList = Array.from(ALLOWED_DOM_ACTIONS)
+    .map((a) => `- ${a}`)
+    .join('\n');
 
-  // Base prompt lines.
-  const promptLines = [
+  const nodeInfo = [];
+  collectNodeInfo(pageContext.snapshot.root, nodeInfo);
+  const nodeListText =
+    nodeInfo.length > 0 ? nodeInfo.join('\n') : '(No nodes available in snapshot)';
+
+  return [
     `User request: ${request}`,
     `Iteration: ${iteration}`,
     '',
@@ -258,6 +664,9 @@ function buildDomAdaptationPrompt({
     '',
     'DOM snapshot (truncated):',
     snapshotText,
+    '',
+    'Available node IDs (with tag and text):',
+    nodeListText,
     '',
     'Allowed tool actions:',
     actionsList,
@@ -277,109 +686,226 @@ function buildDomAdaptationPrompt({
     '- Do not invent tools or output markdown.',
     '- Do not include code fences or commentary outside JSON.',
     '- Avoid removing or hiding nodes unless explicitly requested and safe.',
-  ];
+  ].join('\n');
+}
 
-  // If this is a high-contrast request, add specific instructions.
-  if (presetId === 'high_contrast') {
-    promptLines.push(
-      '',
-      'For high-contrast adaptation, you MUST apply at least TWO complementary changes.',
-      'Common changes include:',
-      '  - Set background color to dark (e.g., #000000) and text color to light (e.g., #ffffff).',
-      '  - Change link colors to yellow or bright blue.',
-      '  - Increase font size or font weight.',
-      '  - Add borders to interactive elements.',
-      'Do NOT mark the task as complete until you have applied at least two distinct, complementary changes that significantly improve readability.',
-      '',
-      'IMPORTANT: You are now viewing the CURRENT state of the page after previous iterations.',
-      'If you detect any text that is unreadable (e.g., dark text on dark background, or light text on light background), you MUST generate additional actions to fix those nodes.',
-      'Do not assume the task is complete if there are any contrast issues remaining.',
-      'Verify that ALL text nodes have sufficient contrast against their background.',
-      'Only set "complete": true when you are confident that the entire page is readable under high contrast.'
-    );
+// =============================================================================
+// Search prompt
+// =============================================================================
 
-    // If there are previous actions, include a summary and a reminder.
-    if (hasPreviousActions && previousActionsSummary) {
-      promptLines.push(
-        '',
-        'Previous changes applied:',
-        previousActionsSummary,
-        '',
-        'Based on these previous changes, you should now add additional improvements to complete the high-contrast adaptation.',
-        'If you only changed the background, now change the text color, link colors, or font size.',
-        'Do not repeat the same change on the same node.',
-        'Generate at least one new action in this iteration.'
-      );
-    }
-
-    // Provide an example with multiple actions.
-    promptLines.push(
-      '',
-      'Example of a complete high-contrast adaptation with two actions:',
-      JSON.stringify(
-        {
-          complete: true,
-          summary: 'Applied high-contrast colors and improved readability.',
-          actions: [
-            {
-              action: 'set_style',
-              nodeId: 'page-adapter-node-1',
-              style: { backgroundColor: '#000000', color: '#ffffff' },
-            },
-            {
-              action: 'set_style',
-              nodeId: 'page-adapter-node-2',
-              style: { color: '#ffff00', fontWeight: 'bold' },
-            },
-          ],
-        },
-        null,
-        2
-      )
-    );
-  }
-
-  return promptLines.join('\n');
+/**
+ * Formats a single search candidate as one input line for the segment prompt.
+ *
+ * @param {object} candidate - The candidate descriptor.
+ * @returns {string} The formatted line.
+ */
+function formatSearchCandidateLine(candidate) {
+  const tag = (candidate.tagName || 'div').toLowerCase();
+  const descriptors = [];
+  if (candidate.role) descriptors.push(`role="${candidate.role}"`);
+  if (candidate.href) descriptors.push(`href="${candidate.href}"`);
+  if (candidate.ariaLabel) descriptors.push(`aria-label="${candidate.ariaLabel}"`);
+  if (candidate.placeholder) descriptors.push(`placeholder="${candidate.placeholder}"`);
+  if (candidate.title) descriptors.push(`title="${candidate.title}"`);
+  if (candidate.type) descriptors.push(`type="${candidate.type}"`);
+  const attrText = descriptors.length > 0 ? ` ${descriptors.join(' ')}` : '';
+  const text = (candidate.text || '').replace(/\s+/g, ' ');
+  return `- ${candidate.id} <${tag}>${attrText} "${text}"`;
 }
 
 /**
- * Normalizes and filters DOM actions.
+ * Builds the per-segment search prompt. The prompt is intentionally small:
+ * it includes only the candidates belonging to one semantic segment, plus a
+ * short page context, and ends with the query so a small model attends to it.
  *
- * @param {Array} actions - Raw actions from the model.
- * @param {string|null} presetId - Preset identifier (for filtering).
- * @returns {Array} Filtered and normalized actions.
+ * @param {object} params - Prompt parameters.
+ * @param {string} params.query - The user's free-form search query.
+ * @param {object} params.segment - The segment descriptor.
+ * @param {object} params.context - The page context (title, url, headings).
+ * @returns {string} The formatted prompt.
  */
-function normalizeDomActions(actions, presetId = null) {
-  if (!Array.isArray(actions)) {
-    return [];
+function buildSegmentSearchPrompt({ query, segment, context }) {
+  const contextText = JSON.stringify(
+    {
+      title: context.title,
+      url: context.url,
+      headings: context.headings,
+    },
+    null,
+    2
+  );
+
+  const candidateLines = segment.candidates.map(formatSearchCandidateLine);
+
+  return [
+    'Page:',
+    contextText,
+    '',
+    `Segment under examination: ${segment.segmentLabel}`,
+    '',
+    'Candidate elements in this segment:',
+    candidateLines.join('\n'),
+    '',
+    'Task: decide whether any candidate above satisfies the following user',
+    `request, reading it semantically rather than literally:`,
+    '',
+    `  "${query}"`,
+    '',
+    'Guidance:',
+    '- "how can i log in" matches "Sign in", "Log in", "Login", "Account".',
+    '- "where is the documentation" matches "Docs", "Documentation", "Guide", "Wiki".',
+    '- "how do i contact support" matches "Contact", "Support", "Help", "Get in touch".',
+    '- Prefer interactive elements (a, button, input, select, textarea, summary).',
+    '- A heading or section whose text describes the target may also be chosen.',
+    '- Ignore cookie banners, newsletter prompts, ads and unrelated site-wide links.',
+    '- You only need to choose the background color; the extension will pick a',
+    '  readable text color automatically to guarantee contrast.',
+    '',
+    'Return only valid JSON with this shape:',
+    '{',
+    '  "matched": boolean,',
+    '  "summary": string,',
+    '  "actions": [',
+    '    {',
+    '      "action": "set_style",',
+    '      "nodeId": "page-adapter-node-N",',
+    '      "style": {',
+    '        "backgroundColor": "#fde047",',
+    '        "outline": "3px solid #f59e0b",',
+    '        "outlineOffset": "2px"',
+    '      }',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Rules:',
+    '- If nothing in this segment matches, set "matched": false and return an empty "actions" array.',
+    '- If one or more candidates match, set "matched": true and return at most 2 set_style actions.',
+    '- "nodeId" must be copied verbatim from the candidate list above.',
+    '- "style" must include "backgroundColor" and may include "outline" and "outlineOffset".',
+    '- Never include "color"; the extension will choose it automatically.',
+    '- Never use "hide_node", "remove_node", "set_text", or any destructive action.',
+    '- Set "summary" to a short sentence naming what you found, or an empty string when nothing matched.',
+    '- Do not include markdown, commentary, or text outside the JSON object.',
+  ].join('\n');
+}
+
+/**
+ * Asks Ollama whether a single segment contains the element(s) matching the
+ * user query, and returns the highlight plan for that segment.
+ *
+ * @param {object} params - The search parameters.
+ * @param {string} params.query - The user's free-form search query.
+ * @param {object} params.segment - The segment descriptor.
+ * @param {object} params.context - The page context.
+ * @param {AbortSignal|null} [params.signal=null] - Optional abort signal.
+ * @returns {Promise<object>} `{ ok, matched, actions, summary }`.
+ * @throws Will throw on abort or on exhausted retries.
+ */
+export async function handleSegmentSearch({ query, segment, context, signal = null }) {
+  if (!segment.candidates || segment.candidates.length === 0) {
+    return { ok: true, matched: false, actions: [], summary: '' };
   }
 
-  // Determine which actions are allowed.
-  const allowedSet = presetId === 'high_contrast'
-    ? ALLOWED_DOM_ACTIONS_HIGH_CONTRAST
-    : ALLOWED_DOM_ACTIONS;
+  const basePrompt = buildSegmentSearchPrompt({ query, segment, context });
 
-  return actions
-    .filter((action) => action && typeof action === 'object')
-    .map((action) => ({
-      ...action,
-      action: typeof action.action === 'string' ? action.action : '',
-      nodeId: typeof action.nodeId === 'string' ? action.nodeId : '',
-    }))
-    .filter((action) => allowedSet.has(action.action) && action.nodeId);
+  const systemPrompt = [
+    'You are a semantic search assistant for a browser extension.',
+    'You are shown one segment of a web page at a time.',
+    'Decide whether any candidate in that segment satisfies the user query.',
+    'Return only JSON that matches the requested shape.',
+    'You may only apply highlight styles; never hide, remove, or rewrite content.',
+    'Use existing node ids from the candidate list only.',
+    'Do not produce internal reasoning. Output JSON directly.',
+  ].join(' ');
+
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= MAX_SEARCH_RETRIES; attempt++) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
+    try {
+      let prompt = basePrompt;
+      if (attempt > 0 && lastError) {
+        prompt += `\n\nYour previous response was invalid: ${lastError}\nPlease correct the response and return only valid JSON.`;
+      }
+
+      const responseText = await callOllama(
+        prompt,
+        systemPrompt,
+        await getPreferredModel(),
+        OLLAMA_NUM_PREDICT,
+        null,
+        signal
+      );
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response from Ollama');
+      }
+
+      const plan = parseJsonResponse(responseText);
+
+      // The model signals "no match here" either via "matched": false or by
+      // returning an empty action list. Both are treated the same way.
+      const rawActions = Array.isArray(plan.actions) ? plan.actions : [];
+      if (plan.matched === false || rawActions.length === 0) {
+        return {
+          ok: true,
+          matched: false,
+          actions: [],
+          summary: typeof plan.summary === 'string' ? plan.summary : '',
+        };
+      }
+
+      // The snapshot passed to validation only needs to resolve node ids
+      // against the candidates the model was actually shown. Building a
+      // minimal snapshot from the candidate list is enough and keeps this
+      // function independent from the page-wide snapshot.
+      const candidateSnapshot = {
+        root: { children: segment.candidates.map((c) => ({ id: c.id })) },
+      };
+
+      const validated = validateAndNormalizePlan(plan, candidateSnapshot);
+
+      return {
+        ok: true,
+        matched: validated.actions.length > 0,
+        actions: validated.actions,
+        summary: validated.summary,
+      };
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error;
+      }
+      lastError = error.message;
+      console.warn(
+        `[ollama] Segment search attempt ${attempt + 1} failed: ${lastError}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  console.error('[ollama] Segment search retries exhausted. Last error:', lastError);
+  throw new Error(
+    `Failed to search segment after ${MAX_SEARCH_RETRIES + 1} attempts. Last error: ${lastError}`
+  );
 }
+
+// =============================================================================
+// Main adaptation function with retry logic
+// =============================================================================
 
 /**
  * Requests a bounded DOM adaptation plan from Ollama.
  *
  * @param {object} payload - The request payload.
- * @param {string} payload.request - The user request.
- * @param {object} payload.pageContext - The page context and snapshot.
- * @param {number} [payload.iteration=1] - The planning iteration.
- * @param {string|null} [payload.presetId=null] - Preset identifier.
- * @param {boolean} [payload.hasPreviousActions=false] - Whether previous actions exist.
- * @param {string} [payload.previousActionsSummary=''] - Summary of previous actions.
- * @returns {Promise<object>} The parsed adaptation plan.
+ * @param {AbortSignal|null} [payload.signal=null] - Optional abort signal.
+ * @returns {Promise<object>} The validated adaptation plan.
+ * @throws Will throw on abort, validation failure, or exhausted retries.
  */
 export async function handleDomAdaptation({
   request,
@@ -388,15 +914,19 @@ export async function handleDomAdaptation({
   presetId = null,
   hasPreviousActions = false,
   previousActionsSummary = '',
+  failingNodeIds = [],
+  signal = null,
 }) {
-  const prompt = buildDomAdaptationPrompt({
+  const basePrompt = buildDomAdaptationPrompt({
     request,
     pageContext,
     iteration,
     presetId,
     hasPreviousActions,
     previousActionsSummary,
+    failingNodeIds,
   });
+
   const systemPrompt = [
     'You are a DOM adaptation planner for a browser extension.',
     'You must reason from the provided page context and snapshot.',
@@ -406,26 +936,65 @@ export async function handleDomAdaptation({
     'Use the existing node ids from the snapshot only.',
     'For high-contrast requests, ensure you change both background and text colors, and do not consider the task complete until you have made at least two complementary changes.',
     'Critically evaluate the current snapshot: if any text is unreadable due to poor contrast, generate more actions to fix it.',
+    'If you are given a list of failing nodes, focus your actions on those nodes.',
+    'Every action must include the required fields declared in the requested JSON shape, in particular "action" and "nodeId".',
+    'Do not produce internal reasoning. Output JSON directly.',
   ].join(' ');
 
-  try {
-    const responseText = await callOllama(prompt, systemPrompt, await getPreferredModel());
-    const plan = parseJsonResponse(responseText);
+  let lastError = null;
+  let retries = 0;
+  let plan = null;
 
-    if (DEBUG) {
-      console.log('[ollama] Parsed plan:', JSON.stringify(plan, null, 2));
+  while (retries <= MAX_LLM_RESPONSE_RETRIES) {
+    if (signal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
     }
 
-    return {
-      ok: true,
-      complete: Boolean(plan.complete),
-      summary: typeof plan.summary === 'string' ? plan.summary : '',
-      actions: normalizeDomActions(plan.actions, presetId),
-    };
-  } catch (error) {
-    console.error('[ollama] Error in handleDomAdaptation:', error);
-    throw new Error(t('error.dom_adaptation_generic', { message: error.message }));
+    try {
+      let prompt = basePrompt;
+      if (retries > 0 && lastError) {
+        prompt += `\n\nYour previous response was invalid: ${lastError}\nPlease correct the response and return only valid JSON.`;
+      }
+
+      const responseText = await callOllama(
+        prompt,
+        systemPrompt,
+        await getPreferredModel(),
+        OLLAMA_NUM_PREDICT,
+        null,
+        signal
+      );
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response from Ollama');
+      }
+
+      plan = parseJsonResponse(responseText);
+      const validatedPlan = validateAndNormalizePlan(plan, pageContext.snapshot);
+      return {
+        ok: true,
+        actions: validatedPlan.actions,
+        complete: validatedPlan.complete,
+        summary: validatedPlan.summary,
+      };
+    } catch (error) {
+      // Do not retry aborted requests; propagate immediately so the caller
+      // can stop the loop and clean up.
+      if (error.name === 'AbortError') {
+        throw error;
+      }
+      lastError = error.message;
+      console.warn(`[ollama] Validation attempt ${retries + 1} failed:`, lastError);
+      retries++;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
+
+  console.error('[ollama] All retries exhausted. Last error:', lastError);
+  throw new Error(
+    `Failed to get valid adaptation plan after ${MAX_LLM_RESPONSE_RETRIES + 1} attempts. Last error: ${lastError}`
+  );
 }
 
 // =============================================================================
@@ -436,18 +1005,25 @@ export async function handleDomAdaptation({
  * Handles a summarize request by calling Ollama.
  *
  * @param {object} payload - The summarize payload.
- * @param {string} payload.text - The page text content.
- * @param {string} payload.title - The page title.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<object>} Response containing the summary.
- * @throws Will throw if Ollama fails or returns an error.
  */
-export async function handleSummarize({ text, title }) {
-  const prompt = `Summarize the following content clearly and concisely, highlighting the main points. If it is an article, extract the key ideas. The title is: "${title}".\n\n${text.slice(0, 15000)}`;
+export async function handleSummarize({ text, title }, signal = null) {
+  const prompt = `Summarize the following content clearly and concisely, highlighting the main points. If it is an article, extract the key ideas. The title is: "${title}".\n\n${text.slice(
+    0,
+    15000
+  )}`;
   const systemPrompt =
     'You are a helpful assistant that summarizes web content clearly and concisely.';
-
   try {
-    const summary = await callOllama(prompt, systemPrompt, await getPreferredModel());
+    const summary = await callOllama(
+      prompt,
+      systemPrompt,
+      await getPreferredModel(),
+      OLLAMA_NUM_PREDICT,
+      null,
+      signal
+    );
     return { ok: true, summary };
   } catch (error) {
     throw new Error(t('error.ollama_generic', { message: error.message }));
@@ -458,18 +1034,25 @@ export async function handleSummarize({ text, title }) {
  * Handles a chat question by calling Ollama with context.
  *
  * @param {object} payload - The chat payload.
- * @param {string} payload.question - The user's question.
- * @param {string} payload.context - The page content context.
+ * @param {AbortSignal|null} [signal=null] - Optional abort signal.
  * @returns {Promise<object>} Response containing the answer.
- * @throws Will throw if Ollama fails or returns an error.
  */
-export async function handleChatQuestion({ question, context }) {
-  const prompt = `Based on the following content, answer the user's question in a helpful and accurate way. If you cannot find the answer, say so clearly.\n\nContent:\n${context.slice(0, 15000)}\n\nQuestion: ${question}`;
+export async function handleChatQuestion({ question, context }, signal = null) {
+  const prompt = `Based on the following content, answer the user's question in a helpful and accurate way. If you cannot find the answer, say so clearly.\n\nContent:\n${context.slice(
+    0,
+    15000
+  )}\n\nQuestion: ${question}`;
   const systemPrompt =
     'You are a helpful assistant that answers questions about webpage content.';
-
   try {
-    const answer = await callOllama(prompt, systemPrompt, await getPreferredModel());
+    const answer = await callOllama(
+      prompt,
+      systemPrompt,
+      await getPreferredModel(),
+      OLLAMA_NUM_PREDICT,
+      null,
+      signal
+    );
     return { ok: true, answer };
   } catch (error) {
     throw new Error(t('error.chat_generic', { message: error.message }));

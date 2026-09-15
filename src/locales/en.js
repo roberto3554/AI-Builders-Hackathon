@@ -9,7 +9,6 @@ export default {
   // Popup UI
   // ===========================================================================
   'popup.title': 'Page Adapter',
-  'popup.subtitle': 'Adapt the page to your needs.',
   'popup.quick_actions': 'Quick actions',
   'popup.write_need': 'Or write what you need',
   'popup.placeholder': 'E.g.: Make this page simpler and hide non‑essential elements.',
@@ -19,6 +18,7 @@ export default {
   'popup.status.sending': 'Sending request…',
   'popup.status.success': 'Request sent to the page.',
   'popup.error.generic': 'An error occurred.',
+  'popup.cancel_button': 'Cancel',
 
   // ===========================================================================
   // Popup – Preferences
@@ -29,6 +29,10 @@ export default {
   'popup.preferences.ollama_model': 'Ollama model',
   'popup.preferences.high_contrast': 'High contrast',
   'popup.preferences.simplified_ui': 'Simplified interface',
+  'popup.preferences.font_size': 'Font size',
+  'popup.preferences.font_size_small': 'Small',
+  'popup.preferences.font_size_medium': 'Medium',
+  'popup.preferences.font_size_large': 'Large',
   'popup.preferences.theme_system': 'System',
   'popup.preferences.theme_light': 'Light',
   'popup.preferences.theme_dark': 'Dark',
@@ -40,15 +44,22 @@ export default {
   // Popup – Presets
   // ===========================================================================
   'preset.high_contrast': 'High contrast',
+  'preset.search': 'Search',
   'preset.simplify': 'Simplify',
   'preset.summarize': 'Summarize',
-  'preset.translate': 'Translate',
 
   // ===========================================================================
   // Popup – Info
   // ===========================================================================
   'popup.info.description': 'This extension allows you to adapt web pages to your needs. To use it, click the power button that appears on the page.',
   'popup.info.version': 'Version: {{version}}',
+
+  // ===========================================================================
+  // Content – Quick menu
+  // ===========================================================================
+  'quick_menu.open_button': 'Open Page Adapter',
+  'quick_menu.open_menu': 'Open menu',
+  'quick_menu.stop_action': 'Stop current action',
 
   // ===========================================================================
   // Content – Summaries
@@ -60,6 +71,8 @@ export default {
   // ===========================================================================
   // Content – Chat
   // ===========================================================================
+  'chat.section_title': 'Conversation',
+  'chat.input_label': 'Ask a question',
   'chat.input_placeholder': 'Ask a question about the content…',
   'chat.send_button': 'Ask',
   'chat.error': 'Error: {{message}}',
@@ -69,7 +82,6 @@ export default {
   // ===========================================================================
   'notification.high_contrast': 'High contrast mode activated',
   'notification.simplified': 'Simplified mode activated',
-  'notification.translated': 'Language changed to Spanish (simulated)',
 
   // ===========================================================================
   // Background – Errors
@@ -82,4 +94,22 @@ export default {
   'error.dom_adaptation_generic': 'Failed to adapt the page: {{message}}',
   'error.chat_generic': 'Failed to answer question: {{message}}',
   'error.send_to_tab': 'Unable to interact with this page. Try a normal webpage and reload after installing the extension.',
+
+  // ===========================================================================
+  // Content – Simplify
+  // ===========================================================================
+  'simplify.summary_hidden': 'Simplified the page by hiding {{count}} non-essential element(s).',
+  'simplify.summary_updated': 'Simplified the page by hiding {{hidden}} element(s) and shortening {{summarized}} element(s).',
+  'simplify.no_changes': 'No changes were needed.',
+
+    // ===========================================================================
+  // Content – Search
+  // ===========================================================================
+  'search.no_query': 'Type what you are looking for in the input field, then click Search.',
+  'search.input_placeholder': 'What are you looking for?',
+  'search.input_label': 'Search query',
+  'search.submit_button': 'Search',
+  'search.summary_found': 'Highlighted {{count}} element(s) matching your query.',
+  'search.summary_not_found': 'No matching element was found on this page.',
+  'search.summary_cancelled': 'Search cancelled by user.',
 };

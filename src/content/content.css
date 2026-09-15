@@ -1,13 +1,18 @@
 /**
  * @fileoverview Styles for the Page Adapter content script UI.
- * All styles are scoped to the injected panel and its children.
+ * All styles are scoped to the shadow root via :host and :host-context.
  * Theming via CSS variables, supports light/dark and high contrast.
+ *
+ * Font scaling is driven by the `--pa-font-scale` custom property, which is
+ * set on the shadow host by JS (`applyFontSize`). All text sizes in the
+ * extension are expressed as `calc(<base>px * var(--pa-font-scale))` so that
+ * changing the scale propagates uniformly through every UI element.
  */
 
 /* ============================================================================
-   CSS Variables (Light theme default)
+   CSS Variables (Light theme default) – defined on :host
    ============================================================================ */
-:root {
+:host {
   --pa-bg-surface: #ffffff;
   --pa-bg-subtle: #f9fafb;
   --pa-bg-elevated: #ffffff;
@@ -22,13 +27,16 @@
   --pa-primary: #2563eb;
   --pa-primary-hover: #1d4ed8;
   --pa-primary-disabled-opacity: 0.55;
+  --pa-danger: #dc2626;
+  --pa-danger-hover: #b91c1c;
   --pa-radius-sm: 8px;
   --pa-radius-md: 10px;
   --pa-radius-lg: 16px;
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
   --pa-shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
   --pa-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --pa-font-size-base: 14px;
+  --pa-font-scale: 1;
+  --pa-font-size-base: calc(14px * var(--pa-font-scale));
   --pa-spacing-xs: 4px;
   --pa-spacing-sm: 8px;
   --pa-spacing-md: 12px;
@@ -36,35 +44,38 @@
   --pa-spacing-xl: 20px;
   --pa-spacing-2xl: 24px;
   --font-size-base: 1rem;
+
+  /* Themed surfaces. The window gradient is very subtle: it goes from the
+     base surface colour to a faintly tinted variant, which reads as depth
+     without ever competing with the content. The glow colour is a low-alpha
+     primary tint used behind the top of the menu. */
+  --pa-surface-gradient: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 65%, var(--pa-bg-surface)) 100%
+  );
+  --pa-decoration-glow-color: color-mix(in oklab, var(--pa-primary) 7%, transparent);
+  --pa-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --pa-card-shadow-hover: 0 8px 20px color-mix(in oklab, var(--pa-primary) 16%, transparent),
+                          0 1px 2px rgba(15, 23, 42, 0.04);
+
+  display: block;
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  color: var(--pa-text-primary);
+  line-height: 1.5;
+  all: initial;
+  display: block;
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  color: var(--pa-text-primary);
+  line-height: 1.5;
 }
 
 /* ============================================================================
-   Dark theme (system preference)
+   Dark theme (via host class)
    ============================================================================ */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --pa-bg-surface: #1e293b;
-    --pa-bg-subtle: #0f172a;
-    --pa-bg-elevated: #334155;
-    --pa-bg-input: #334155;
-    --pa-text-primary: #f1f5f9;
-    --pa-text-secondary: #94a3b8;
-    --pa-text-muted: #64748b;
-    --pa-text-light: #ffffff;
-    --pa-border-color: #475569;
-    --pa-border-input: #475569;
-    --pa-border-focus: #60a5fa;
-    --pa-primary: #3b82f6;
-    --pa-primary-hover: #2563eb;
-    --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
-    --font-size-base: 1rem;
-  }
-}
-
-/* ============================================================================
-   Theme override classes (applied to body)
-   ============================================================================ */
-body.page-adapter-theme-dark {
+:host-context(.page-adapter-theme-dark) {
   --pa-bg-surface: #1e293b;
   --pa-bg-subtle: #0f172a;
   --pa-bg-elevated: #334155;
@@ -78,30 +89,27 @@ body.page-adapter-theme-dark {
   --pa-border-focus: #60a5fa;
   --pa-primary: #3b82f6;
   --pa-primary-hover: #2563eb;
+  --pa-danger: #f87171;
+  --pa-danger-hover: #ef4444;
   --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.6);
-}
 
-body.page-adapter-theme-light {
-  --pa-bg-surface: #ffffff;
-  --pa-bg-subtle: #f9fafb;
-  --pa-bg-elevated: #ffffff;
-  --pa-bg-input: #ffffff;
-  --pa-text-primary: #1f2937;
-  --pa-text-secondary: #6b7280;
-  --pa-text-muted: #9ca3af;
-  --pa-text-light: #ffffff;
-  --pa-border-color: #e5e7eb;
-  --pa-border-input: #d1d5db;
-  --pa-border-focus: #60a5fa;
-  --pa-primary: #2563eb;
-  --pa-primary-hover: #1d4ed8;
-  --pa-shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.2);
+  --pa-surface-gradient: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 45%, var(--pa-bg-surface)) 100%
+  );
+  --pa-decoration-glow-color: color-mix(in oklab, var(--pa-primary) 14%, transparent);
+  --pa-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --pa-card-shadow-hover: 0 8px 20px color-mix(in oklab, var(--pa-primary) 28%, transparent),
+                          0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 /* ============================================================================
-   High contrast mode (applied via class on body)
+   High contrast mode (via host class)
+   Gradients and shadows are flattened to solid colours and outlines so the
+   theme stays strictly black-and-white with the yellow accent.
    ============================================================================ */
-body.page-adapter-high-contrast {
+:host-context(.page-adapter-high-contrast) {
   --pa-bg-surface: #000000;
   --pa-bg-subtle: #000000;
   --pa-bg-elevated: #000000;
@@ -115,25 +123,48 @@ body.page-adapter-high-contrast {
   --pa-border-focus: #ffff00;
   --pa-primary: #ffff00;
   --pa-primary-hover: #ffff00;
+  --pa-danger: #ff8080;
+  --pa-danger-hover: #ffb0b0;
   --pa-shadow-panel: none;
+
+  --pa-surface-gradient: linear-gradient(180deg, #000000 0%, #000000 100%);
+  --pa-decoration-glow-color: transparent;
+  --pa-card-shadow: none;
+  --pa-card-shadow-hover: none;
 }
 
-body.page-adapter-simplified .page-adapter-menu-header p,
-body.page-adapter-simplified .page-adapter-menu-section h2,
-body.page-adapter-simplified .page-adapter-input-label,
-body.page-adapter-simplified .page-adapter-counter {
+/* ============================================================================
+   Font size (via host class)
+   The scale factor multiplies every text size in the extension. Small and
+   large are chosen to remain clearly readable while still being noticeably
+   distinct from the medium default.
+   ============================================================================ */
+:host-context(.page-adapter-font-small) {
+  --pa-font-scale: 0.85;
+}
+:host-context(.page-adapter-font-medium) {
+  --pa-font-scale: 1;
+}
+:host-context(.page-adapter-font-large) {
+  --pa-font-scale: 1.15;
+}
+
+/* ============================================================================
+   Simplified UI (via host class) – hides some elements
+   ============================================================================ */
+:host-context(.page-adapter-simplified) .page-adapter-menu-header p,
+:host-context(.page-adapter-simplified) .page-adapter-menu-section h2,
+:host-context(.page-adapter-simplified) .page-adapter-input-label,
+:host-context(.page-adapter-simplified) .page-adapter-counter {
   display: none;
 }
-
-body.page-adapter-simplified .page-adapter-menu-container {
+:host-context(.page-adapter-simplified) .page-adapter-menu-container {
   gap: var(--pa-spacing-md);
 }
-
-body.page-adapter-simplified .page-adapter-preset-button span:last-child {
+:host-context(.page-adapter-simplified) .page-adapter-preset-button span:last-child {
   display: none;
 }
-
-body.page-adapter-simplified .page-adapter-input-footer {
+:host-context(.page-adapter-simplified) .page-adapter-input-footer {
   justify-content: flex-end;
 }
 
@@ -175,44 +206,16 @@ body.page-adapter-simplified .page-adapter-input-footer {
   justify-content: space-between;
   gap: var(--pa-spacing-md);
   margin-bottom: var(--pa-spacing-lg);
-  font-size: 16px;
-}
-
-.page-adapter-close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--pa-radius-sm);
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.page-adapter-close:hover {
-  background: var(--pa-border-color);
-}
-
-.page-adapter-close:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
+  font-size: calc(16px * var(--pa-font-scale));
 }
 
 /* ============================================================================
    Status, labels, request display
    ============================================================================ */
-.page-adapter-status {
-  margin-bottom: var(--pa-spacing-lg);
-  color: var(--pa-primary);
-  font-weight: 600;
-}
-
 .page-adapter-label {
   margin-bottom: var(--pa-spacing-sm);
   color: var(--pa-text-secondary);
-  font-size: 12px;
+  font-size: calc(13px * var(--pa-font-scale));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -223,6 +226,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   border-radius: var(--pa-radius-md);
   background: var(--pa-bg-subtle);
   color: var(--pa-text-primary);
+  font-size: calc(15px * var(--pa-font-scale));
 }
 
 .page-adapter-info {
@@ -231,7 +235,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   gap: var(--pa-spacing-sm);
   margin-top: var(--pa-spacing-lg);
   color: var(--pa-text-secondary);
-  font-size: 12px;
+  font-size: calc(13px * var(--pa-font-scale));
 }
 
 .page-adapter-dot {
@@ -247,28 +251,24 @@ body.page-adapter-simplified .page-adapter-input-footer {
   overflow: hidden;
   margin-top: var(--pa-spacing-lg);
   color: var(--pa-text-muted);
-  font-size: 11px;
+  font-size: calc(12px * var(--pa-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* ============================================================================
-   Chat messages container
+   Chat messages
    ============================================================================ */
 .page-adapter-chat-messages {
-  max-height: 300px;
-  overflow-y: auto;
-  padding: var(--pa-spacing-sm);
+  padding: var(--pa-spacing-md);
   background: var(--pa-bg-subtle);
-  border-radius: var(--pa-radius-sm);
+  border-radius: var(--pa-radius-md);
   border: 1px solid var(--pa-border-color);
   display: flex;
   flex-direction: column;
   gap: var(--pa-spacing-sm);
-  margin-bottom: var(--pa-spacing-md);
 }
 
-/* Individual chat message */
 .page-adapter-chat-message {
   display: flex;
   margin-bottom: var(--pa-spacing-xs);
@@ -284,24 +284,28 @@ body.page-adapter-simplified .page-adapter-input-footer {
 
 .page-adapter-chat-bubble {
   max-width: 80%;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  padding: 10px 14px;
   border-radius: var(--pa-radius-md);
   word-wrap: break-word;
   background: var(--pa-border-color);
   color: var(--pa-text-primary);
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.55;
 }
 
 .page-adapter-chat-message.user .page-adapter-chat-bubble {
   background: var(--pa-primary);
   color: var(--pa-text-light);
+  border-bottom-right-radius: 4px;
 }
 
 .page-adapter-chat-message.assistant .page-adapter-chat-bubble {
-  background: var(--pa-bg-subtle);
+  background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
+  border: 1px solid var(--pa-border-color);
+  border-bottom-left-radius: 4px;
 }
 
-/* Markdown content inside chat bubbles */
 .page-adapter-chat-bubble p {
   margin: 0 0 var(--pa-spacing-sm) 0;
 }
@@ -318,6 +322,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   padding: 2px 4px;
   border-radius: var(--pa-radius-sm);
   font-family: monospace;
+  font-size: 0.92em;
 }
 .page-adapter-chat-bubble pre {
   background: #1e293b;
@@ -332,21 +337,27 @@ body.page-adapter-simplified .page-adapter-input-footer {
    ============================================================================ */
 .page-adapter-chat-input-area {
   display: flex;
+  align-items: center;
   gap: var(--pa-spacing-sm);
-  padding-top: var(--pa-spacing-sm);
-  border-top: 1px solid var(--pa-border-color);
-  margin-top: var(--pa-spacing-sm);
 }
 
 .page-adapter-chat-input {
   flex: 1;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+  min-width: 0;
+  padding: 11px 14px;
   border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-sm);
+  border-radius: var(--pa-radius-md);
   outline: none;
-  font-size: var(--pa-font-size-base);
+  font-family: inherit;
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.4;
   background: var(--pa-bg-input);
   color: var(--pa-text-primary);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-chat-input::placeholder {
+  color: var(--pa-text-muted);
 }
 
 .page-adapter-chat-input:focus {
@@ -359,33 +370,101 @@ body.page-adapter-simplified .page-adapter-input-footer {
   cursor: not-allowed;
 }
 
-.page-adapter-chat-send {
-  padding: var(--pa-spacing-sm) var(--pa-spacing-lg);
+/* ---------------------------------------------------------------------------
+   Circular action buttons in the chat input area.
+   The send button and the stop button share the same shape, size, and
+   primary-blue background so they read as a matched pair: the send button
+   shows an upward arrow, the stop button shows a filled square. Only one
+   of them is visible at a time.
+   --------------------------------------------------------------------------- */
+.page-adapter-chat-send,
+.page-adapter-chat-stop {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: var(--pa-primary);
-  color: var(--pa-text-light);
-  border: none;
-  border-radius: var(--pa-radius-sm);
+  color: #ffffff;
   cursor: pointer;
-  font-weight: 600;
-  font-size: var(--pa-font-size-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--pa-primary) 45%, transparent);
+  transition:
+    background 150ms ease,
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
-.page-adapter-chat-send:hover {
+.page-adapter-chat-send[hidden],
+.page-adapter-chat-stop[hidden] {
+  display: none;
+}
+
+.page-adapter-chat-send:hover,
+.page-adapter-chat-stop:hover {
   background: var(--pa-primary-hover);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--pa-primary) 55%, transparent);
 }
 
-.page-adapter-chat-send:disabled {
+.page-adapter-chat-send:active,
+.page-adapter-chat-stop:active {
+  transform: scale(0.94);
+}
+
+.page-adapter-chat-send:disabled,
+.page-adapter-chat-stop:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-.page-adapter-chat-send:focus-visible {
+.page-adapter-chat-send:focus-visible,
+.page-adapter-chat-stop:focus-visible {
   outline: 2px solid var(--pa-border-focus);
   outline-offset: 2px;
 }
 
+.page-adapter-chat-send svg {
+  width: 21px;
+  height: 21px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-chat-stop svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+  fill: currentColor;
+  stroke: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-chat-send,
+:host-context(.page-adapter-high-contrast) .page-adapter-chat-stop {
+  color: #000000;
+  border: 2px solid #ffffff;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-chat-send,
+  .page-adapter-chat-stop {
+    transition: none;
+  }
+  .page-adapter-chat-send:active,
+  .page-adapter-chat-stop:active {
+    transform: none;
+  }
+}
+
 /* ============================================================================
    Floating window (draggable panel)
+   The window uses a subtle vertical gradient so the surface reads as a
+   single, softly lit panel rather than a flat rectangle.
    ============================================================================ */
 .page-adapter-floating-window {
   position: fixed;
@@ -394,7 +473,8 @@ body.page-adapter-simplified .page-adapter-input-footer {
   flex-direction: column;
   font-family: var(--pa-font-family);
   font-size: var(--pa-font-size-base);
-  background: var(--pa-bg-surface);
+  background: var(--pa-surface-gradient);
+  border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-lg);
   box-shadow: var(--pa-shadow-panel);
   overflow: hidden;
@@ -402,28 +482,11 @@ body.page-adapter-simplified .page-adapter-input-footer {
   min-height: 200px;
 }
 
-.page-adapter-floating-window .page-adapter-title-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
-  background: var(--pa-bg-subtle);
-  cursor: move;
-  border-bottom: 1px solid var(--pa-border-color);
-  flex-shrink: 0;
-}
-
-.page-adapter-floating-window .page-adapter-title-text {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--pa-text-primary);
-}
-
 .page-adapter-floating-window .page-adapter-content-area {
   flex: 1;
   overflow-y: auto;
-  padding: var(--pa-spacing-lg);
-  background: var(--pa-bg-surface);
+  padding: 0;
+  background: transparent;
 }
 
 /* ============================================================================
@@ -461,7 +524,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   float: right;
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: calc(24px * var(--pa-font-scale));
   cursor: pointer;
   color: var(--pa-text-secondary);
 }
@@ -484,7 +547,7 @@ body.page-adapter-simplified .page-adapter-input-footer {
   border-radius: var(--pa-radius-sm);
   z-index: 999999;
   font-family: var(--pa-font-family);
-  font-size: var(--pa-font-size-base);
+  font-size: calc(14px * var(--pa-font-scale));
   box-shadow: var(--pa-shadow-panel);
   border: 1px solid var(--pa-border-color);
   pointer-events: none;
@@ -499,11 +562,11 @@ body.page-adapter-simplified .page-adapter-input-footer {
 /* ============================================================================
    Floating button (power)
    ============================================================================ */
-#page-adapter-floating-button {
+#extension-floating-button {
   position: fixed;
   top: 20px;
   right: 20px;
-  z-index: 2147483647; /* Max z-index to stay above everything */
+  z-index: 2147483647;
   width: 60px;
   height: 60px;
   border: 2px solid var(--pa-border-color);
@@ -511,68 +574,293 @@ body.page-adapter-simplified .page-adapter-input-footer {
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
   box-shadow: var(--pa-shadow-panel);
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   padding: 0;
-  cursor: grab;
-  user-select: none; /* Prevent text selection during drag */
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-#page-adapter-floating-button:hover {
-  cursor: grab;
-}
-
-#page-adapter-floating-button:active {
+#extension-floating-button:active {
   cursor: grabbing;
 }
 
-#page-adapter-floating-button:hover {
+#extension-floating-button:hover {
   background: var(--pa-bg-subtle);
   transform: scale(1.05);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
 }
 
-#page-adapter-floating-button:focus-visible {
+#extension-floating-button:focus-visible {
   outline: 3px solid var(--pa-border-focus);
   outline-offset: 2px;
 }
 
-#page-adapter-floating-button svg {
+#extension-floating-button svg {
   width: 32px;
   height: 32px;
   display: block;
   stroke: currentColor;
 }
 
-/* High contrast adjustments */
-body.page-adapter-high-contrast #page-adapter-floating-button {
+:host-context(.page-adapter-high-contrast) #extension-floating-button {
   border-width: 3px;
   background: var(--pa-bg-surface);
   color: var(--pa-text-primary);
   box-shadow: none;
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  #page-adapter-floating-button {
+  #extension-floating-button {
     transition: none;
   }
-  #page-adapter-floating-button:hover {
+  #extension-floating-button:hover {
     transform: none;
   }
 }
 
 /* ============================================================================
-   Menu window specific styles
+   Quick-action menu (expanded from the floating button)
    ============================================================================ */
+.page-adapter-quick-menu {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--pa-spacing-sm);
+  width: 48px;
+  overflow: visible;
+}
 
+.page-adapter-quick-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 48px;
+  min-width: 48px;
+  padding: 0 11px;
+  border: 2px solid var(--pa-border-color);
+  border-radius: 999px;
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  cursor: pointer;
+  box-shadow: var(--pa-shadow-panel);
+  box-sizing: border-box;
+  white-space: nowrap;
+  flex-shrink: 0;
+  animation: page-adapter-quick-menu-item-in 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.page-adapter-quick-menu-button:hover {
+  background: var(--pa-bg-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.page-adapter-quick-menu-button:focus-visible {
+  outline: 3px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-quick-menu-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.page-adapter-quick-menu-button__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.page-adapter-quick-menu-button__label {
+  display: inline-block;
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: var(--pa-text-primary);
+  font-size: calc(16px * var(--pa-font-scale));
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    max-width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.2s ease,
+    margin-left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.page-adapter-quick-menu-button:hover .page-adapter-quick-menu-button__label,
+.page-adapter-quick-menu-button:focus-visible .page-adapter-quick-menu-button__label {
+  max-width: 240px;
+  margin-left: 10px;
+  opacity: 1;
+}
+
+.page-adapter-quick-menu-button--arrow {
+  border-color: var(--pa-primary);
+  color: var(--pa-primary);
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-quick-menu-button {
+  border-width: 3px;
+  box-shadow: none;
+}
+
+.page-adapter-quick-menu--closing .page-adapter-quick-menu-button {
+  animation: page-adapter-quick-menu-item-out 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  pointer-events: none;
+}
+
+@keyframes page-adapter-quick-menu-item-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes page-adapter-quick-menu-item-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(0.92); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-quick-menu-button,
+  .page-adapter-quick-menu--closing .page-adapter-quick-menu-button {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .page-adapter-quick-menu-button__label {
+    transition: none;
+  }
+}
+
+/* ============================================================================
+   Menu window – title bar
+   The bottom edge gets a soft hairline highlight so the bar reads as a
+   distinct surface from the body without adding weight.
+   ============================================================================ */
+.page-adapter-title-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-xs);
+  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
+  background: var(--pa-bg-surface);
+  border-bottom: 1px solid var(--pa-border-color);
+  cursor: move;
+  flex-shrink: 0;
+}
+
+.page-adapter-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pa-text-primary);
+  font-size: calc(16px * var(--pa-font-scale));
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Circular ghost buttons used in the title bar */
+.page-adapter-back-button,
+.page-adapter-settings-toggle,
+.page-adapter-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.page-adapter-back-button:hover,
+.page-adapter-settings-toggle:hover,
+.page-adapter-close:hover {
+  background: var(--pa-bg-subtle);
+  color: var(--pa-text-primary);
+}
+
+.page-adapter-back-button:focus-visible,
+.page-adapter-settings-toggle:focus-visible,
+.page-adapter-close:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-back-button svg,
+.page-adapter-settings-toggle svg,
+.page-adapter-close svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+.page-adapter-back-button svg {
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-close svg {
+  stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-settings-toggle svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.page-adapter-floating-window *,
+.page-adapter-floating-window *::before,
+.page-adapter-floating-window *::after {
+  box-sizing: border-box;
+}
+
+/* Back button is hidden by default; shown in chat view via JS. */
+.page-adapter-back-button {
+  display: none;
+}
+
+/* ============================================================================
+   Menu window – content layout
+   A soft radial glow sits behind the top of the content, echoing the
+   window's vertical gradient and giving the header area a faint sense of
+   light. The glow is a background-image so it never affects layout and
+   never interferes with the stacking of the sections below.
+   ============================================================================ */
 .page-adapter-menu-container {
   display: flex;
   flex-direction: column;
-  gap: var(--pa-spacing-lg);
+  gap: var(--pa-spacing-xl);
+  padding: var(--pa-spacing-2xl);
+  background-image: radial-gradient(
+    ellipse 560px 260px at 50% -20%,
+    var(--pa-decoration-glow-color) 0%,
+    transparent 70%
+  );
+  background-repeat: no-repeat;
 }
 
 .page-adapter-menu-header {
@@ -580,198 +868,337 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 }
 
 .page-adapter-menu-header-row {
-  align-items: flex-start;
   display: flex;
-  gap: var(--pa-spacing-md);
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--pa-spacing-md);
 }
 
 .page-adapter-menu-title-group {
   min-width: 0;
 }
 
-.page-adapter-settings-toggle {
-  align-items: center;
-  background: var(--pa-bg-subtle);
-  border: 1px solid var(--pa-border-color);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-secondary);
-  cursor: pointer;
-  display: grid;
-  height: 32px;
-  place-items: center;
-  width: 32px;
-  flex: 0 0 auto;
-}
-
-.page-adapter-menu-subtitle {
-  color: var(--pa-text-secondary);
-  font-size: 16px;
-}
-
-.page-adapter-settings-toggle:hover {
-  background: var(--pa-border-color);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-settings-toggle:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-settings-toggle svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-}
-
-.page-adapter-settings-panel {
-  background: var(--pa-bg-elevated);
-  border: 1px solid var(--pa-border-color);
-  border-radius: var(--pa-radius-md);
-  box-shadow: var(--pa-shadow-panel);
-  margin-top: calc(var(--pa-spacing-sm) * -1);
-  padding: var(--pa-spacing-md);
-}
-
-.page-adapter-settings-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pa-spacing-sm);
-}
-
 .page-adapter-menu-header h1 {
-  font-size: 22px;
-  line-height: 1.2;
-  margin: 0 0 var(--pa-spacing-sm);
+  margin: 0 0 var(--pa-spacing-xs);
   color: var(--pa-text-primary);
+  font-size: calc(21px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
-.page-adapter-menu-header p {
-  color: var(--pa-text-secondary);
-  font-size: 14px;
+.page-adapter-menu-header p,
+.page-adapter-menu-subtitle {
   margin: 0;
-}
-
-.page-adapter-menu-section h2 {
   color: var(--pa-text-secondary);
-  font-size: 16px;
-  margin: 0 0 var(--pa-spacing-md);
+  font-size: calc(14px * var(--pa-font-scale));
+  line-height: 1.5;
 }
 
+/* ============================================================================
+   Menu window – section headers
+   The accent bar uses a short vertical gradient so it reads as a small
+   illuminated tick rather than a flat rectangle.
+   ============================================================================ */
+.page-adapter-menu-section h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-sm);
+  margin: 0 0 var(--pa-spacing-md);
+  color: var(--pa-text-secondary);
+  font-size: calc(12px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.page-adapter-menu-section h2::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    var(--pa-primary) 0%,
+    color-mix(in oklab, var(--pa-primary) 45%, transparent) 100%
+  );
+}
+
+/* ============================================================================
+   Menu window – presets grid
+   Each preset is a soft card: a slight vertical gradient, a hairline
+   border that turns into a primary-tinted border on hover, and a lift with
+   a primary-tinted shadow that reinforces the interactive state. The
+   gradient and shadow are themed and flatten out in high contrast mode.
+   ============================================================================ */
 .page-adapter-presets-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--pa-spacing-sm);
 }
 
+.page-adapter-preset-wrapper {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+}
+
+.page-adapter-preset-wrapper .page-adapter-preset-button {
+  flex: 1;
+  min-width: 0;
+}
+
 .page-adapter-preset-button {
+  position: relative;
+  overflow: hidden;
+  display: flex;
   align-items: center;
-  background: var(--pa-bg-surface);
+  gap: var(--pa-spacing-md);
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
   border: 1px solid var(--pa-border-color);
   border-radius: var(--pa-radius-md);
+  background: linear-gradient(
+    180deg,
+    var(--pa-bg-surface) 0%,
+    color-mix(in oklab, var(--pa-bg-subtle) 45%, var(--pa-bg-surface)) 100%
+  );
   color: var(--pa-text-primary);
-  cursor: pointer;
-  display: flex;
-  gap: var(--pa-spacing-sm);
-  min-height: 42px;
-  padding: 9px 10px;
+  font-family: var(--pa-font-family);
+  font-size: calc(15px * var(--pa-font-scale));
+  font-weight: 500;
   text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  font-size: var(--pa-font-size-base);
-  font-size: var(--font-size-base);
-  width: 100%;
+  cursor: pointer;
+  box-shadow: var(--pa-card-shadow);
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .page-adapter-preset-button:hover {
-  background: var(--pa-bg-subtle);
-  border-color: var(--pa-border-input);
+  border-color: color-mix(in oklab, var(--pa-primary) 38%, var(--pa-border-color));
+  transform: translateY(-1px);
+  box-shadow: var(--pa-card-shadow-hover);
+}
+
+.page-adapter-preset-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
 }
 
 .page-adapter-preset-button:disabled {
   opacity: var(--pa-primary-disabled-opacity);
   cursor: not-allowed;
+  transform: none;
+  box-shadow: var(--pa-card-shadow);
+}
+
+/* High contrast mode: no gradient, no shadow, but a solid 2px border so
+   the button still reads as a distinct surface. */
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-button {
+  background: var(--pa-bg-surface);
+  border-width: 2px;
+  box-shadow: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-button:hover {
+  border-color: var(--pa-primary);
+  transform: none;
+  box-shadow: none;
 }
 
 .page-adapter-preset-icon {
-  background: var(--pa-bg-subtle);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-primary);
   display: grid;
-  font-size: 12px;
-  font-weight: 700;
-  height: 24px;
   place-items: center;
-  width: 24px;
   flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--pa-primary) 20%, transparent) 0%,
+    color-mix(in oklab, var(--pa-primary) 8%, transparent) 100%
+  );
+  color: var(--pa-primary);
 }
 
 .page-adapter-preset-icon svg {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
+  stroke: currentColor;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-icon {
+  background: transparent;
+  border: 2px solid var(--pa-primary);
+  color: var(--pa-primary);
+}
+
+/* ---------------------------------------------------------------------------
+   Per-preset cancel button.
+   A small circular button with an X icon that fades in only while the
+   associated preset is running. Clicking it aborts the in-flight request
+   for that preset.
+   --------------------------------------------------------------------------- */
+.page-adapter-preset-cancel {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.page-adapter-preset-wrapper--active .page-adapter-preset-cancel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.page-adapter-preset-cancel:hover {
+  background: color-mix(in oklab, var(--pa-danger) 12%, var(--pa-bg-surface));
+  color: var(--pa-danger);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.page-adapter-preset-cancel:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-preset-cancel svg {
+  width: 11px;
+  height: 11px;
+  display: block;
+  color: currentColor;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-preset-cancel {
+  border: 1px solid var(--pa-border-color);
+  box-shadow: none;
+}
+
+.page-adapter-preset-button--active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    color-mix(in oklab, var(--pa-primary) 60%, white) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: page-adapter-sheen 1.6s linear infinite;
+  opacity: 1;
+  mix-blend-mode: screen;
+}
+
+@keyframes page-adapter-sheen {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-preset-button--active::after {
+    animation: none;
+    opacity: 0;
+  }
+  .page-adapter-preset-button:hover {
+    transform: none;
+  }
+  .page-adapter-preset-cancel {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ============================================================================
+   Menu window – input section
+   The divider between the presets and the input area is a single, full-width
+   hairline. The vertical rhythm and the section heading treatment provide
+   enough visual separation on their own.
+   ============================================================================ */
+.page-adapter-input-section {
+  margin-top: var(--pa-spacing-lg);
+  padding-top: var(--pa-spacing-lg);
 }
 
 .page-adapter-input-label {
-  color: var(--pa-text-secondary);
   display: block;
-  font-size: 16px;
-  font-weight: 600;
   margin-bottom: var(--pa-spacing-sm);
+  color: var(--pa-text-secondary);
+  font-size: calc(13px * var(--pa-font-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.page-adapter-model-row input[type='text'] {
-  background: var(--pa-bg-input);
-  border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-md);
-  color: var(--pa-text-primary);
-  font-size: 16px;
-  outline: none;
-  padding: var(--pa-spacing-sm) var(--pa-spacing-md);
+.page-adapter-textarea-wrapper {
+  position: relative;
+  display: block;
   width: 100%;
 }
 
-.page-adapter-model-row input[type='text']:focus {
-  border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
-}
-
-.page-adapter-toggle-row {
-  align-items: center;
-  color: var(--pa-text-secondary);
-  display: flex;
-  gap: var(--pa-spacing-md);
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.page-adapter-toggle-row input[type='checkbox'] {
-  accent-color: var(--pa-primary);
-  height: 16px;
-  width: 16px;
+.page-adapter-textarea-wrapper .page-adapter-menu-textarea {
+  padding: 14px 14px 60px 14px;
 }
 
 .page-adapter-menu-textarea {
-  background: var(--pa-bg-input);
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  padding: 14px;
   border: 1px solid var(--pa-border-input);
   border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-input);
   color: var(--pa-text-primary);
-  display: block;
-  font-size: 16px;
-  line-height: 1.5;
-  min-height: 120px;
-  outline: none;
-  padding: var(--pa-spacing-md);
-  resize: vertical;
-  width: 100%;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   font-family: var(--pa-font-family);
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.55;
+  resize: vertical;
+  outline: none;
+  box-shadow: var(--pa-card-shadow);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-menu-textarea::placeholder {
+  color: var(--pa-text-muted);
 }
 
 .page-adapter-menu-textarea:focus {
   border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
+  box-shadow: var(--pa-shadow-focus), var(--pa-card-shadow);
 }
 
 .page-adapter-menu-textarea:disabled {
@@ -779,29 +1206,98 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   cursor: not-allowed;
 }
 
-.page-adapter-input-footer {
+/* Send button – circular, positioned inside the textarea corner. */
+.page-adapter-send-button {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pa-primary);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--pa-primary) 45%, transparent);
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-send-button:hover {
+  background: var(--pa-primary-hover);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--pa-primary) 55%, transparent);
+}
+
+.page-adapter-send-button:active {
+  transform: scale(0.94);
+}
+
+.page-adapter-send-button:disabled {
+  opacity: var(--pa-primary-disabled-opacity);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.page-adapter-send-button:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-send-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+}
+
+:host-context(.page-adapter-high-contrast) .page-adapter-send-button {
+  color: #000000;
+  border: 2px solid #ffffff;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-send-button {
+    transition: none;
+  }
+  .page-adapter-send-button:active {
+    transform: none;
+  }
+}
+
+.page-adapter-input-footer {
   display: flex;
-  gap: var(--pa-spacing-md);
+  align-items: center;
   justify-content: space-between;
+  gap: var(--pa-spacing-md);
   margin-top: var(--pa-spacing-sm);
 }
 
 .page-adapter-counter {
   color: var(--pa-text-muted);
-  font-size: 11px;
+  font-size: calc(12px * var(--pa-font-scale));
+  font-variant-numeric: tabular-nums;
 }
 
+/* ============================================================================
+   Menu window – secondary/action buttons
+   ============================================================================ */
 .page-adapter-primary-button {
-  background: var(--pa-primary);
+  padding: 9px 16px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-primary);
   color: #ffffff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(14px * var(--pa-font-scale));
   font-weight: 600;
-  padding: 9px 16px;
-  transition: background 0.15s ease;
+  transition: background 150ms ease;
 }
 
 .page-adapter-primary-button:hover {
@@ -818,66 +1314,116 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
   outline-offset: 2px;
 }
 
-.page-adapter-status {
+/* ============================================================================
+   Menu window – settings panel
+   ============================================================================ */
+.page-adapter-settings-panel {
+  padding: var(--pa-spacing-lg);
+  border: 1px solid var(--pa-border-color);
+  border-radius: var(--pa-radius-md);
+  background: var(--pa-bg-subtle);
+}
+
+.page-adapter-settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pa-spacing-md);
+}
+
+.page-adapter-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pa-spacing-md);
+}
+
+.page-adapter-preference-row label {
   color: var(--pa-text-secondary);
-  font-size: 14px;
+  font-size: calc(14px * var(--pa-font-scale));
+  font-weight: 500;
+}
+
+.page-adapter-preference-row select,
+.page-adapter-preference-row input[type='text'] {
+  min-width: 150px;
+  max-width: 60%;
+  padding: 8px 11px;
+  border: 1px solid var(--pa-border-input);
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-bg-input);
+  color: var(--pa-text-primary);
+  font-family: inherit;
+  font-size: calc(14px * var(--pa-font-scale));
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-preference-row select:focus,
+.page-adapter-preference-row input[type='text']:focus {
+  border-color: var(--pa-border-focus);
+  box-shadow: var(--pa-shadow-focus);
+}
+
+.page-adapter-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pa-spacing-md);
+  color: var(--pa-text-secondary);
+  font-size: calc(14px * var(--pa-font-scale));
+  cursor: pointer;
+}
+
+.page-adapter-toggle-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--pa-primary);
+  cursor: pointer;
+}
+
+.page-adapter-model-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.page-adapter-model-row input[type='text'] {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* ============================================================================
+   Menu window – status messages
+   ============================================================================ */
+.page-adapter-status {
   min-height: 20px;
+  color: var(--pa-text-secondary);
+  font-size: calc(14px * var(--pa-font-scale));
 }
 
 .page-adapter-status.error {
-  color: #dc2626;
+  color: var(--pa-danger);
 }
 
 .page-adapter-status.success {
   color: #16a34a;
 }
 
-@media (prefers-color-scheme: dark) {
-  .page-adapter-status.error {
-    color: #f87171;
-  }
-  .page-adapter-status.success {
-    color: #4ade80;
-  }
+:host-context(.page-adapter-theme-dark) .page-adapter-status.error {
+  color: #f87171;
+}
+:host-context(.page-adapter-theme-dark) .page-adapter-status.success {
+  color: #4ade80;
 }
 
 .page-adapter-menu-preferences {
-  border-top: 1px solid var(--pa-border-color);
-  padding-top: var(--pa-spacing-lg);
   margin-top: var(--pa-spacing-sm);
+  padding-top: var(--pa-spacing-lg);
+  border-top: 1px solid var(--pa-border-color);
 }
 
-.page-adapter-preference-row {
-  align-items: center;
-  display: flex;
-  gap: var(--pa-spacing-md);
-  justify-content: space-between;
-  margin-bottom: var(--pa-spacing-sm);
-}
-
-.page-adapter-preference-row label {
-  color: var(--pa-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.page-adapter-preference-row select {
-  background: var(--pa-bg-input);
-  border: 1px solid var(--pa-border-input);
-  border-radius: var(--pa-radius-sm);
-  color: var(--pa-text-primary);
-  font-size: 13px;
-  outline: none;
-  padding: var(--pa-spacing-xs) var(--pa-spacing-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.page-adapter-preference-row select:focus {
-  border-color: var(--pa-border-focus);
-  box-shadow: var(--pa-shadow-focus);
-}
-
-/* Resize handle */
+/* ============================================================================
+   Resize handle
+   ============================================================================ */
 .page-adapter-resize-handle {
   position: absolute;
   bottom: 0;
@@ -897,91 +1443,761 @@ body.page-adapter-high-contrast #page-adapter-floating-button {
 }
 
 /* ============================================================================
-   Title bar
+   Chat view container
    ============================================================================ */
-.page-adapter-title-bar {
+.page-adapter-chat-view {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: var(--pa-spacing-xl);
+}
+
+/* Messages section grows to fill the available vertical space, leaving
+   the input section pinned to the bottom of the view. */
+.page-adapter-chat-messages-section {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
-  background: var(--pa-bg-subtle);
-  cursor: move;
-  border-bottom: 1px solid var(--pa-border-color);
-  flex-shrink: 0;
-  gap: var(--pa-spacing-sm);
-}
-
-.page-adapter-title-text {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--pa-text-primary);
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
 }
 
-/* Settings toggle button (in title bar) */
-.page-adapter-settings-toggle {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
+.page-adapter-chat-messages-section .page-adapter-chat-messages {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-bottom: 0;
+  overflow-y: auto;
+}
+
+.page-adapter-chat-view .page-adapter-input-section {
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   Thinking indicator (adapted to shadow DOM)
+   ============================================================================ */
+.page-adapter-thinking-indicator .la-05__bubble {
+  position: relative;
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--pa-radius-md) var(--pa-radius-md) var(--pa-radius-md) 0.35rem;
+  background: var(--pa-bg-surface);
+  border: 1px solid var(--pa-border-color);
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+  box-shadow: 0 20px 40px -28px var(--pa-shadow-panel);
+  inline-size: max-content;
+  min-inline-size: 11.5rem;
+  max-inline-size: min(100%, 18rem);
+}
+
+.page-adapter-thinking-indicator .la-05__tail {
+  position: absolute;
+  inset-block-end: -1px;
+  inset-inline-start: -0.3rem;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  background: var(--pa-bg-surface);
+  border-inline-start: 1px solid var(--pa-border-color);
+  border-block-end: 1px solid var(--pa-border-color);
+  border-end-start-radius: 0.2rem;
+  rotate: 45deg;
+}
+
+.page-adapter-thinking-indicator .la-05__dots {
+  display: flex;
+  gap: 0.34rem;
+  padding-block: 0.15rem;
+}
+
+.page-adapter-thinking-indicator .la-05__dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background: var(--pa-primary);
+  opacity: 0.55;
+  animation: la-05-bounce 1.25s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+}
+
+.page-adapter-thinking-indicator .la-05__dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.page-adapter-thinking-indicator .la-05__dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes la-05-bounce {
+  0%, 60%, 100% {
+    translate: 0 0;
+    opacity: 0.5;
+  }
+  30% {
+    translate: 0 -0.5rem;
+    opacity: 1;
+  }
+}
+
+@supports (animation-timing-function: linear(0, 1)) {
+  .page-adapter-thinking-indicator .la-05__dot {
+    animation-timing-function: linear(0, 0.18 12%, 0.62 26%, 1 42%, 0.82 58%, 1 74%, 0.95 88%, 1);
+  }
+}
+
+.page-adapter-thinking-indicator .la-05__phase {
+  margin: 0;
+  font-size: calc(15px * var(--pa-font-scale));
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--pa-text-muted) 28%, var(--pa-text-primary) 48%, var(--pa-text-muted) 68%) 0 0 / 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: la-05-shimmer 2.8s linear infinite;
+}
+
+@keyframes la-05-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.page-adapter-thinking-indicator .la-05__answer {
+  display: none;
+  gap: 0.4rem;
+  inline-size: 13rem;
+}
+
+.page-adapter-thinking-indicator .la-05__answer i {
+  display: block;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--pa-text-primary) 12%, transparent);
+}
+
+.page-adapter-thinking-indicator .la-05__answer i:nth-child(2) {
+  inline-size: 88%;
+}
+.page-adapter-thinking-indicator .la-05__answer i:nth-child(3) {
+  inline-size: 62%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-thinking-indicator * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .page-adapter-thinking-indicator .la-05__dot {
+    opacity: 1;
+  }
+  .page-adapter-thinking-indicator .la-05__dot:nth-child(2) {
+    opacity: 0.6;
+  }
+  .page-adapter-thinking-indicator .la-05__dot:nth-child(3) {
+    opacity: 0.35;
+  }
+  .page-adapter-thinking-indicator .la-05__phase {
+    background: none;
+    color: var(--pa-text-primary);
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* ============================================================================
+   Scrollbars (modern, minimal, theme-aware)
+   ============================================================================ */
+.page-adapter-chat-messages,
+.page-adapter-content-area,
+.page-adapter-overlay-content {
+  scrollbar-width: auto;
+  scrollbar-color: var(--pa-border-color) transparent;
+  scrollbar-gutter: stable;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar,
+.page-adapter-content-area::-webkit-scrollbar,
+.page-adapter-overlay-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-track,
+.page-adapter-content-area::-webkit-scrollbar-track,
+.page-adapter-overlay-content::-webkit-scrollbar-track {
   background: transparent;
-  color: var(--pa-text-secondary);
-  cursor: pointer;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-thumb,
+.page-adapter-content-area::-webkit-scrollbar-thumb,
+.page-adapter-overlay-content::-webkit-scrollbar-thumb {
+  background-color: var(--pa-border-color);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-thumb:hover,
+.page-adapter-content-area::-webkit-scrollbar-thumb:hover,
+.page-adapter-overlay-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--pa-text-secondary);
+}
+
+.page-adapter-chat-messages::-webkit-scrollbar-corner,
+.page-adapter-content-area::-webkit-scrollbar-corner,
+.page-adapter-overlay-content::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================================
+   Transient status message (main view)
+   ============================================================================ */
+.page-adapter-transient-status {
+  position: absolute;
+  bottom: var(--pa-spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 80%;
+  padding: var(--pa-spacing-sm) var(--pa-spacing-lg);
+  border-radius: var(--pa-radius-sm);
+  background: var(--pa-bg-elevated);
+  color: var(--pa-text-primary);
+  border: 1px solid var(--pa-border-color);
+  box-shadow: var(--pa-shadow-panel);
+  font-size: calc(14px * var(--pa-font-scale));
+  text-align: center;
+  z-index: 10;
+  animation: pa-fade-in 0.15s ease;
+}
+
+.page-adapter-transient-status--error {
+  border-color: var(--pa-danger);
+  color: var(--pa-danger);
+}
+
+:host-context(.page-adapter-theme-dark) .page-adapter-transient-status--error {
+  border-color: #f87171;
+  color: #f87171;
+}
+
+/* ============================================================================
+   Floating button – icon and loading ring
+   The icon and the ring are permanent children of the button. Two icons
+   share the same slot and crossfade via the `data-loading` attribute on
+   the button: the default accessibility glyph while idle, and a stop
+   square while a quick action is running. The ring is composed of two
+   layers:
+     - a rotating conic-gradient arc that fades smoothly from transparent
+       to the primary color, masked into a thin ring;
+     - a soft radial glow that gently pulses behind the button.
+   Animations are paused while the ring is idle so nothing is computed
+   when the button is not loading.
+   ============================================================================ */
+.page-adapter-floating-button__icon {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 0 40px;
+  pointer-events: none;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 180ms ease,
+    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.page-adapter-settings-toggle:hover {
-  background: var(--pa-bg-subtle);
-  color: var(--pa-text-primary);
-}
-
-.page-adapter-settings-toggle:focus-visible {
-  outline: 2px solid var(--pa-border-focus);
-  outline-offset: 2px;
-}
-
-.page-adapter-settings-toggle svg {
-  width: 24px;
-  height: 24px;
+.page-adapter-floating-button__icon svg {
   display: block;
-  fill: currentColor;
+  width: 32px;
+  height: 32px;
+  stroke: currentColor;
+  fill: none;
 }
 
-/* Close button (in title bar) */
-.page-adapter-close {
-  width: 40px;
-  height: 40px;
+/* The stop icon keeps the glyph neutral (currentColor) so it inherits
+   the theme automatically; the square shape carries the meaning. */
+.page-adapter-floating-button__icon--stop {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.page-adapter-floating-button__icon--stop svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+#extension-floating-button[data-loading='true']
+  .page-adapter-floating-button__icon:not(.page-adapter-floating-button__icon--stop) {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+#extension-floating-button[data-loading='true']
+  .page-adapter-floating-button__icon--stop {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.page-adapter-floating-button__ring {
+  display: block;
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.86);
+  transition:
+    opacity 220ms ease,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#extension-floating-button[data-loading='true'] .page-adapter-floating-button__ring {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.page-adapter-floating-button__ring::before,
+.page-adapter-floating-button__ring::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation-play-state: paused;
+  will-change: transform, opacity;
+}
+
+#extension-floating-button[data-loading='true'] .page-adapter-floating-button__ring::before,
+#extension-floating-button[data-loading='true'] .page-adapter-floating-button__ring::after {
+  animation-play-state: running;
+}
+
+/* Rotating arc. The conic gradient sweeps from fully transparent across
+   roughly half the circle, then ramps to a bright head. The radial mask
+   carves the disc into a thin 3px ring. */
+.page-adapter-floating-button__ring::before {
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 45%,
+    color-mix(in oklab, var(--pa-primary) 20%, transparent) 65%,
+    color-mix(in oklab, var(--pa-primary) 70%, transparent) 85%,
+    var(--pa-primary) 98%,
+    color-mix(in oklab, var(--pa-primary) 40%, white) 100%
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3px),
+    #000 calc(100% - 3px)
+  );
+  animation: pa-floating-button-spin 1.1s linear infinite;
+}
+
+/* Soft radial glow behind the button. It gently expands and contracts to
+   give the loading state a subtle heartbeat. */
+.page-adapter-floating-button__ring::after {
+  inset: -4px;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--pa-primary) 30%, transparent) 0%,
+    transparent 70%
+  );
+  animation: pa-floating-button-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes pa-floating-button-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes pa-floating-button-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+/* High contrast mode keeps the same structure but forces yellow so the
+   ring stays clearly visible against a black background. */
+:host-context(.page-adapter-high-contrast)
+  #extension-floating-button[data-loading='true']
+  .page-adapter-floating-button__ring::before {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 45%,
+    color-mix(in oklab, #ffff00 25%, transparent) 70%,
+    #ffff00 98%,
+    #ffff00 100%
+  );
+}
+
+:host-context(.page-adapter-high-contrast)
+  #extension-floating-button[data-loading='true']
+  .page-adapter-floating-button__ring::after {
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, #ffff00 28%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-adapter-floating-button__icon {
+    transition: none;
+  }
+  .page-adapter-floating-button__icon--stop,
+  #extension-floating-button[data-loading='true']
+    .page-adapter-floating-button__icon:not(.page-adapter-floating-button__icon--stop) {
+    transform: none;
+  }
+  .page-adapter-floating-button__ring {
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
+  }
+  .page-adapter-floating-button__ring::before {
+    animation-duration: 2.4s;
+  }
+  .page-adapter-floating-button__ring::after {
+    animation: none;
+    opacity: 0.7;
+    transform: none;
+  }
+}
+
+/* ============================================================================
+   Quick-action panels
+   Anchored compact dialogs used by quick-menu entries. Two variants share a
+   single visual language (rounded corners, soft shadow, a titled header with
+   an icon chip, and a circular primary action) matching the main menu
+   window.
+   ============================================================================ */
+.page-adapter-quick-input {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--pa-border-color);
+  border-radius: var(--pa-radius-lg);
+  background: var(--pa-bg-surface);
+  color: var(--pa-text-primary);
+  font-family: var(--pa-font-family);
+  font-size: var(--pa-font-size-base);
+  box-shadow: var(--pa-shadow-panel);
+  overflow: hidden;
+  animation: page-adapter-quick-input-in 0.18s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.page-adapter-quick-input *,
+.page-adapter-quick-input *::before,
+.page-adapter-quick-input *::after {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.page-adapter-quick-input--closing {
+  animation: page-adapter-quick-input-out 0.16s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  pointer-events: none;
+}
+
+@keyframes page-adapter-quick-input-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes page-adapter-quick-input-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.97); }
+}
+
+.page-adapter-quick-input__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-sm);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--pa-border-color);
+  background: var(--pa-bg-surface);
+}
+
+.page-adapter-quick-input__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--pa-radius-sm);
+  background: color-mix(in oklab, var(--pa-primary) 14%, transparent);
+  color: var(--pa-primary);
+}
+
+.page-adapter-quick-input__icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.page-adapter-quick-input__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pa-text-primary);
+  font-size: calc(15px * var(--pa-font-scale));
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-adapter-quick-input__close {
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--pa-text-secondary);
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-  flex: 0 0 40px;
+  flex: 0 0 26px;
+  transition: background 150ms ease, color 150ms ease;
 }
 
-.page-adapter-close:hover {
+.page-adapter-quick-input__close:hover {
   background: var(--pa-bg-subtle);
   color: var(--pa-text-primary);
 }
 
-.page-adapter-close:focus-visible {
+.page-adapter-quick-input__close:focus-visible {
   outline: 2px solid var(--pa-border-focus);
   outline-offset: 2px;
 }
 
-.page-adapter-close svg {
-  width: 24px;
-  height: 24px;
+.page-adapter-quick-input__close svg {
   display: block;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
+  fill: none;
+}
+
+.page-adapter-quick-input__body {
+  display: flex;
+  align-items: center;
+  gap: var(--pa-spacing-sm);
+  padding: var(--pa-spacing-md);
+}
+
+.page-adapter-quick-input__field {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--pa-border-input);
+  border-radius: var(--pa-radius-md);
+  outline: none;
+  font-family: inherit;
+  font-size: calc(15px * var(--pa-font-scale));
+  line-height: 1.4;
+  background: var(--pa-bg-input);
+  color: var(--pa-text-primary);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-quick-input__field::placeholder {
+  color: var(--pa-text-muted);
+}
+
+.page-adapter-quick-input__field:focus {
+  border-color: var(--pa-border-focus);
+  box-shadow: var(--pa-shadow-focus);
+}
+
+.page-adapter-quick-input__submit {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pa-primary);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--pa-primary) 45%, transparent);
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.page-adapter-quick-input__submit:hover {
+  background: var(--pa-primary-hover);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--pa-primary) 55%, transparent);
+}
+
+.page-adapter-quick-input__submit:active {
+  transform: scale(0.94);
+}
+
+.page-adapter-quick-input__submit:disabled {
+  opacity: var(--pa-primary-disabled-opacity);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.page-adapter-quick-input__submit:focus-visible {
+  outline: 2px solid var(--pa-border-focus);
+  outline-offset: 2px;
+}
+
+.page-adapter-quick-input__submit svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Result variant (used by the summarize quick action). The panel reuses the
+   same header and outer chrome but swaps the input row for a scrollable
+   content area. Content is rendered as Markdown when the renderer is
+   available, so paragraph, list, code and blockquote rules are provided.
+   --------------------------------------------------------------------------- */
+.page-adapter-quick-input--result .page-adapter-quick-input__content {
+  padding: var(--pa-spacing-md) var(--pa-spacing-lg);
+  max-height: min(400px, 55vh);
+  overflow-y: auto;
+  color: var(--pa-text-primary);
+  font-size: calc(14px * var(--pa-font-scale));
+  line-height: 1.6;
+  word-break: break-word;
+  scrollbar-width: auto;
+  scrollbar-color: var(--pa-border-color) transparent;
+  scrollbar-gutter: stable;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content p {
+  margin: 0 0 var(--pa-spacing-sm) 0;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content p:last-child {
+  margin-bottom: 0;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content ul,
+.page-adapter-quick-input--result .page-adapter-quick-input__content ol {
+  margin: var(--pa-spacing-xs) 0;
+  padding-left: var(--pa-spacing-xl);
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content li {
+  margin-bottom: var(--pa-spacing-xs);
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content h1,
+.page-adapter-quick-input--result .page-adapter-quick-input__content h2,
+.page-adapter-quick-input--result .page-adapter-quick-input__content h3,
+.page-adapter-quick-input--result .page-adapter-quick-input__content h4 {
+  margin: var(--pa-spacing-md) 0 var(--pa-spacing-sm);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content h1 {
+  font-size: calc(18px * var(--pa-font-scale));
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content h2 {
+  font-size: calc(16px * var(--pa-font-scale));
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content h3,
+.page-adapter-quick-input--result .page-adapter-quick-input__content h4 {
+  font-size: calc(15px * var(--pa-font-scale));
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content code {
+  background: color-mix(in oklab, var(--pa-text-primary) 8%, transparent);
+  padding: 2px 4px;
+  border-radius: var(--pa-radius-sm);
+  font-family: monospace;
+  font-size: 0.92em;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content pre {
+  margin: var(--pa-spacing-sm) 0;
+  padding: var(--pa-spacing-sm);
+  border-radius: var(--pa-radius-sm);
+  background: color-mix(in oklab, var(--pa-text-primary) 6%, transparent);
+  overflow-x: auto;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content pre code {
+  background: none;
+  padding: 0;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content a {
+  color: var(--pa-primary);
+  text-decoration: underline;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content blockquote {
+  margin: var(--pa-spacing-sm) 0;
+  padding-left: var(--pa-spacing-md);
+  border-left: 3px solid var(--pa-border-color);
+  color: var(--pa-text-secondary);
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content hr {
+  border: 0;
+  border-top: 1px solid var(--pa-border-color);
+  margin: var(--pa-spacing-md) 0;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content table {
+  border-collapse: collapse;
+  margin: var(--pa-spacing-sm) 0;
+  font-size: 0.95em;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content th,
+.page-adapter-quick-input--result .page-adapter-quick-input__content td {
+  border: 1px solid var(--pa-border-color);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content::-webkit-scrollbar {
+  width: 12px;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content::-webkit-scrollbar-thumb {
+  background-color: var(--pa-border-color);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.page-adapter-quick-input--result .page-adapter-quick-input__content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--pa-text-secondary);
 }

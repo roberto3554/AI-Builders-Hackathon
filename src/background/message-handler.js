@@ -11,7 +11,7 @@ import {
   handleSummarize,
   handleChatQuestion,
 } from './ollama.js';
-import { handleUserRequest } from './user-request.js';
+import { handleUserRequest, cancelActiveRequest } from './user-request.js';
 
 // =============================================================================
 // Message Router
@@ -40,6 +40,13 @@ export function onRuntimeMessage(message, sender, sendResponse) {
             sendResponse({ ok: false, error: error.message || 'Unknown error' });
           });
         return true;
+
+      case MESSAGE_TYPES.CANCEL_REQUEST: {
+        const requestId = message.payload?.requestId;
+        const cancelled = cancelActiveRequest(requestId);
+        sendResponse({ ok: true, cancelled });
+        return;
+      }
 
       case MESSAGE_TYPES.OLLAMA_REQUEST:
         handleOllamaRequest(message.payload)
