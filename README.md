@@ -59,7 +59,7 @@ No cloud. No accounts. No API keys. Just you and your browser.
 ## Demo
 
 
-<img src="nyt.gif" width="800">
+<img src="nyt.gif" width="400">
 
 
 ---
