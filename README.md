@@ -59,7 +59,7 @@ No cloud. No accounts. No API keys. Just you and your browser.
 ## Demo
 
 
-![Video Project 5](Video%20Project%205.gif)
+<img src="Video%20Project%205.gif" width="800">
 
 
 ---
