@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo2.png" alt="Prisma logo" width="240" />
+<img src="logo2.png" alt="Prisma logo" width="340" />
 
 
 **A private, local AI agent that adapts the web to you.**
