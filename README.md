@@ -58,8 +58,6 @@ No cloud. No accounts. No API keys. Just you and your browser.
 
 ## Demo
 
-> *Add a GIF or short screen recording here showing the floating button, the quick menu, and one of the transformations in action.*
-
 
 ![Video Project 5](Video%20Project%205.gif)
 
